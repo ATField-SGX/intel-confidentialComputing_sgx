@@ -33,6 +33,7 @@
 #include "oal/aesm_persistent_storage.h"
 #include "se_stdio.h"
 #include "se_string.h"
+#include "sgx_safe_file_ops.h"
 #include <sys/stat.h>
 #include <unistd.h>
 #include <errno.h>
@@ -103,7 +104,7 @@ static ae_error_t aesm_write_file(
         if((ret=aesm_get_data_path(p_file_name, p_full_path, MAX_PATH)) != AE_SUCCESS)
             goto CLEANUP;
     }
-    if(NULL == (p_file = fopen(p_full_path, "wb"))){
+    if(NULL == (p_file = sgx_safe_fopen(p_full_path, "wb"))){
         ret = OAL_FILE_ACCESS_ERROR;
         goto CLEANUP;
     }
@@ -140,7 +141,7 @@ static ae_error_t aesm_read_file(
         if((ret=aesm_get_data_path(p_file_name, p_full_path, MAX_PATH)) != AE_SUCCESS)
             goto CLEANUP;
     }
-    if(NULL == (p_file = fopen(p_full_path, "rb"))){
+    if(NULL == (p_file = sgx_safe_fopen(p_full_path, "rb"))){
         ret = OAL_FILE_ACCESS_ERROR;
         goto CLEANUP;
     }

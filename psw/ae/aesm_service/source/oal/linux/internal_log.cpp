@@ -40,6 +40,7 @@
 #include <se_stdio.h>
 #include <se_string.h>
 #include "se_thread.h"
+#include "sgx_safe_file_ops.h"
 #include "aeerror.h"
 #include "aesm_error.h"
 #include "sgx_error.h"
@@ -148,7 +149,7 @@ void aesm_internal_log(const char *file_name, int line_no, const char *funname, 
             return;
         FILE *logfile = NULL;
         se_mutex_lock(&cs);
-        logfile = fopen(filename, "a+");
+        logfile = sgx_safe_fopen(filename, "a+");
         if(logfile == NULL){
             se_mutex_unlock(&cs);
             return;
