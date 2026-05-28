@@ -161,7 +161,9 @@ int main(int argc, char *argv[]) {
                 AESM_LOG_FINI();
                 exit(1);
             }
-            UnixServerSocket* serverSock = new UnixServerSocket(CONFIG_SOCKET_PATH);
+            UnixServerSocket* serverSock = new UnixServerSocket(
+                CONFIG_SOCKET_PATH,
+                UnixServerSocket::DEFAULT_CLIENT_TIMEOUT_MILLISECONDS);
 
             CSelector* selector = new CSelector(serverSock);
             server = new CAESMServer(serverSock, selector, aesmLogic);

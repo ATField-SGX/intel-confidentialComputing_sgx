@@ -39,6 +39,11 @@
 #include <string.h>
 #include <stdlib.h>
 
+namespace {
+// Bounds protobuf IPC payloads and prevents untrusted peers from forcing unbounded reads.
+static const uint32_t AESM_MAX_IPC_MESSAGE_SIZE = 1024 * 1024;
+}
+
 SocketTransporter::SocketTransporter(ISocketFactory* socketFactory, ISerializer* serializer)
 :mSocketFactory(socketFactory), mSerializer(serializer)
 {
@@ -59,15 +64,34 @@ SocketTransporter::~SocketTransporter()
 }
 
 AEMessage* SocketTransporter::receiveMessage(ICommunicationSocket* sock) {
+    if (sock == NULL)
+        return NULL;
+
     AEMessage * message = new AEMessage();
     char* msgSize = NULL;
     msgSize = sock->readRaw(sizeof(AEMessage::size));
-    if (msgSize != NULL)
+    if (msgSize == NULL)
     {
-        memcpy((char*)&message->size, msgSize, sizeof(message->size));
-        message->data = sock->readRaw(message->size);
-        delete [] msgSize;
+        delete message;
+        return NULL;
     }
+
+    memcpy((char*)&message->size, msgSize, sizeof(message->size));
+    delete [] msgSize;
+
+    if (message->size == 0 || message->size > AESM_MAX_IPC_MESSAGE_SIZE)
+    {
+        delete message;
+        return NULL;
+    }
+
+    message->data = sock->readRaw(message->size);
+    if (message->data == NULL)
+    {
+        delete message;
+        return NULL;
+    }
+
     return message;
 }
 
