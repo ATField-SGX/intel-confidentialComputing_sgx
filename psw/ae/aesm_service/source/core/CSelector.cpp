@@ -34,87 +34,202 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <unistd.h>
+#include <string.h>
 
 CSelector::CSelector(IServerSocket* serverSock) :
-    m_serverSock(serverSock)
+    m_serverSock(serverSock),
+    m_epollFd(-1),
+    m_serverFd(-1),
+    m_terminationFd(-1),
+    m_eventCount(0),
+    m_canAcceptConnection(false)
 {
     m_connectedSockets.clear();
-    FD_ZERO(&m_workingSet);
+
+    m_epollFd = epoll_create(1);
+    if (m_epollFd < 0) {
+        throw "Epoll creation failed";
+    }
 }
 
 
 CSelector::~CSelector()
 {
+    if (m_epollFd >= 0) {
+        close(m_epollFd);
+        m_epollFd = -1;
+    }
 }
 
 void CSelector::addSocket(ICommunicationSocket* socket)
 {
+    if (socket == NULL) {
+        return;
+    }
+
+    addFd(socket->getSockDescriptor());
     m_connectedSockets.push_back(socket);
 }
 
 void CSelector::removeSocket(ICommunicationSocket* socket)
 {
+    if (socket == NULL) {
+        return;
+    }
+
+    removeFd(socket->getSockDescriptor());
     m_connectedSockets.remove(socket);
 }
 
 bool CSelector::select(int fd_term)
 {
-    int max_sd;
-    std::list<ICommunicationSocket*>::const_iterator it = m_connectedSockets.begin();
+    registerServerSocket();
+    registerTerminationFd(fd_term);
 
-    FD_ZERO(&m_workingSet);
-    FD_SET(m_serverSock->getSockDescriptor(), &m_workingSet);
-    max_sd = m_serverSock->getSockDescriptor();
+    m_canAcceptConnection = false;
 
-    if (fd_term != -1) {
-        // a pipe is setup to prevent select from blocking current thread
-        FD_SET(fd_term, &m_workingSet);
-        if (fd_term > max_sd)
-            max_sd = fd_term;
+    size_t monitoredFdCount = m_connectedSockets.size();
+    if (m_serverFd != -1) {
+        monitoredFdCount++;
+    }
+    if (m_terminationFd != -1) {
+        monitoredFdCount++;
     }
 
-    for(; it!=m_connectedSockets.end(); ++it) {
-        int sock_fd = (*it)->getSockDescriptor();
-        if (sock_fd > max_sd)
-            max_sd = sock_fd;
-
-        FD_SET(sock_fd, &m_workingSet);
+    if (monitoredFdCount == 0) {
+        throw "No file descriptors registered for epoll wait";
     }
 
-    int rc = (int) TEMP_FAILURE_RETRY(::select(max_sd + 1, &m_workingSet, NULL, NULL, NULL));
-    if (rc < 0) {
-        throw "Select failed"; 
+    m_events.resize(monitoredFdCount);
+
+    do {
+        m_eventCount = epoll_wait(m_epollFd, &m_events.front(), static_cast<int>(m_events.size()), -1);
+    } while (m_eventCount == -1 && errno == EINTR);
+
+    if (m_eventCount < 0) {
+        throw "Epoll wait failed";
     }
 
-    if (fd_term != -1 && FD_ISSET(fd_term, &m_workingSet))
-        return false;
+    for (int i = 0; i < m_eventCount; i++) {
+        int fd = m_events[i].data.fd;
+        uint32_t events = m_events[i].events;
+        if (fd_term != -1 && fd == fd_term) {
+            return false;
+        }
+        if (fd == m_serverFd) {
+            if ((events & (EPOLLERR | EPOLLHUP)) != 0) {
+                throw "Epoll reported error on server socket";
+            }
+            if ((events & EPOLLIN) != 0) {
+                m_canAcceptConnection = true;
+            }
+        }
+    }
 
     return true;
 }
 
 bool CSelector::canAcceptConnection()
 {
-    if (FD_ISSET(m_serverSock->getSockDescriptor(), &m_workingSet)) {
-        return true;
-    } else {
-        return false;
-    }
+    return m_canAcceptConnection;
 }
 
 std::list<ICommunicationSocket*> CSelector::getSocsWithNewContent()
 {
     std::list<ICommunicationSocket*> socketswithContent;
-    std::list<ICommunicationSocket*>::iterator it = m_connectedSockets.begin();
 
-    while( it!=m_connectedSockets.end())
-    {
-        if (FD_ISSET((*it)->getSockDescriptor(), &m_workingSet)) {
-            socketswithContent.push_back(*it);
-            m_connectedSockets.erase(it++);
-        } else {
-            ++it;
+    for (int i = 0; i < m_eventCount; i++) {
+        int fd = m_events[i].data.fd;
+        if (fd == m_serverFd || fd == m_terminationFd) {
+            continue;
+        }
+
+        ICommunicationSocket* socket = detachSocket(fd);
+        if (socket != NULL) {
+            socketswithContent.push_back(socket);
         }
     }
 
     return socketswithContent;
+}
+
+void CSelector::registerServerSocket()
+{
+    int serverFd = m_serverSock->getSockDescriptor();
+
+    if (serverFd < 0) {
+        throw "Invalid server file descriptor";
+    }
+
+    if (serverFd == m_serverFd) {
+        return;
+    }
+
+    if (m_serverFd != -1) {
+        removeFd(m_serverFd);
+    }
+
+    addFd(serverFd);
+    m_serverFd = serverFd;
+}
+
+void CSelector::registerTerminationFd(int fd_term)
+{
+    if (fd_term == m_terminationFd) {
+        return;
+    }
+
+    if (m_terminationFd != -1) {
+        removeFd(m_terminationFd);
+    }
+
+    if (fd_term != -1) {
+        addFd(fd_term);
+    }
+
+    m_terminationFd = fd_term;
+}
+
+void CSelector::addFd(int fd)
+{
+    if (fd < 0) {
+        throw "Invalid file descriptor";
+    }
+
+    struct epoll_event event;
+    memset(&event, 0, sizeof(event));
+    event.data.fd = fd;
+    event.events = EPOLLIN;
+
+    if (epoll_ctl(m_epollFd, EPOLL_CTL_ADD, fd, &event) != 0) {
+        throw "Epoll add failed";
+    }
+}
+
+void CSelector::removeFd(int fd)
+{
+    if (fd == -1) {
+        return;
+    }
+
+    if (epoll_ctl(m_epollFd, EPOLL_CTL_DEL, fd, NULL) != 0 && errno != ENOENT && errno != EBADF) {
+        throw "Epoll delete failed";
+    }
+}
+
+ICommunicationSocket* CSelector::detachSocket(int fd)
+{
+    std::list<ICommunicationSocket*>::iterator it = m_connectedSockets.begin();
+
+    while (it != m_connectedSockets.end()) {
+        ICommunicationSocket* socket = *it;
+        if (socket->getSockDescriptor() == fd) {
+            removeFd(fd);
+            m_connectedSockets.erase(it);
+            return socket;
+        }
+        ++it;
+    }
+
+    return NULL;
 }
