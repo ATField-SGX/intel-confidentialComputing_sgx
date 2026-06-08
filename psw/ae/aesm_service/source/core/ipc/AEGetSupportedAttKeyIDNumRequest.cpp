@@ -103,11 +103,14 @@ bool AEGetSupportedAttKeyIDNumRequest::check()
 {
     if (m_request == NULL)
         return false;
-    return m_request->IsInitialized();
+    if (!m_request->IsInitialized())
+        return false;
+
+    return true;
 }
 
 
-IAEResponse* AEGetSupportedAttKeyIDNumRequest::execute(IAESMLogic* aesmLogic) 
+IAEResponse* AEGetSupportedAttKeyIDNumRequest::execute(IAESMLogic* aesmLogic)
 {
     aesm_error_t result = AESM_UNEXPECTED_ERROR;
     uint32_t att_key_id_num = 0;

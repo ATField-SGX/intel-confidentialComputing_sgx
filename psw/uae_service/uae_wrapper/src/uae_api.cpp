@@ -118,7 +118,7 @@ uae_oal_status_t oal_init_quote_ex(const sgx_att_key_id_t *att_key_id,
         if (servicesProvider == NULL)
             return UAE_OAL_ERROR_UNEXPECTED;
 
-        AEInitQuoteExRequest initQuoteExRequest(sizeof(sgx_att_key_id_t), (uint8_t*)att_key_id, (pub_key_id != NULL), buf_size, timeout_usec / 1000);
+        AEInitQuoteExRequest initQuoteExRequest(sizeof(sgx_att_key_id_t), (uint8_t*)att_key_id, (pub_key_id != NULL), (pub_key_id != NULL) ? buf_size : 0, timeout_usec / 1000);
         AEInitQuoteExResponse initQuoteExResponse;
         uae_oal_status_t ret  = servicesProvider->InternalInterface(&initQuoteExRequest, &initQuoteExResponse, timeout_usec / 1000);
         if (ret == UAE_OAL_SUCCESS)
@@ -236,4 +236,3 @@ uae_oal_status_t oal_get_supported_att_key_ids(
         return ret;
     });
 }
-

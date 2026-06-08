@@ -47,7 +47,7 @@ AEInitQuoteExResponse::AEInitQuoteExResponse(aesm::message::Response::InitQuoteE
     m_response = new aesm::message::Response::InitQuoteExResponse(response);
 }
 
-AEInitQuoteExResponse::AEInitQuoteExResponse(uint32_t errorCode, uint32_t target_info_size, uint8_t *target_info, 
+AEInitQuoteExResponse::AEInitQuoteExResponse(uint32_t errorCode, uint32_t target_info_size, uint8_t *target_info,
             uint64_t *pub_key_id_size, uint64_t buf_size, const uint8_t *pub_key_id) :
     m_response(NULL)
 {
@@ -58,8 +58,8 @@ AEInitQuoteExResponse::AEInitQuoteExResponse(uint32_t errorCode, uint32_t target
         m_response->set_target_info(target_info, target_info_size);
     if (pub_key_id_size!= NULL )
         m_response->set_pub_key_id_size(*pub_key_id_size);
-    if (buf_size!= 0 && pub_key_id != NULL)
-        m_response->set_pub_key_id(pub_key_id, buf_size);
+    if (pub_key_id_size != NULL && *pub_key_id_size <= buf_size && pub_key_id != NULL)
+        m_response->set_pub_key_id(pub_key_id, *pub_key_id_size);
 }
 
 AEInitQuoteExResponse::AEInitQuoteExResponse(const AEInitQuoteExResponse& other) :
@@ -115,7 +115,7 @@ bool AEInitQuoteExResponse::inflateWithMessage(AEMessage* message)
     return true;
 }
 
-bool AEInitQuoteExResponse::GetValues(uint32_t* errorCode, uint32_t target_info_size, uint8_t *target_info, 
+bool AEInitQuoteExResponse::GetValues(uint32_t* errorCode, uint32_t target_info_size, uint8_t *target_info,
             uint64_t* pub_key_id_size, uint64_t buf_size, uint8_t *pub_key_id) const
 {
     if (m_response->has_target_info() && target_info != NULL)
@@ -125,16 +125,18 @@ bool AEInitQuoteExResponse::GetValues(uint32_t* errorCode, uint32_t target_info_
         else
             return false;
     }
-    if (m_response->has_pub_key_id_size())
-        *pub_key_id_size = m_response->pub_key_id_size(); 
-    if (m_response->has_pub_key_id() && pub_key_id_size != NULL &&  m_response->pub_key_id().size() == *pub_key_id_size )
+    if (m_response->has_pub_key_id_size() && pub_key_id_size != NULL)
+        *pub_key_id_size = m_response->pub_key_id_size();
+    else if (m_response->has_pub_key_id_size())
+        return false;
+    if (m_response->has_pub_key_id() && pub_key_id_size != NULL && pub_key_id != NULL &&  m_response->pub_key_id().size() == *pub_key_id_size )
     {
         if (m_response->pub_key_id().size() <= buf_size)
             memcpy(pub_key_id, m_response->pub_key_id().c_str(), m_response->pub_key_id().size());
         else
             return false;
     }
-    *errorCode = m_response->errorcode(); 
+    *errorCode = m_response->errorcode();
     return true;
 }
 

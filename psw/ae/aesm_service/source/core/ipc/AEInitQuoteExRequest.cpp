@@ -36,6 +36,12 @@
 #include <stdlib.h>
 #include <limits.h>
 #include <IAEMessage.h>
+#include <sgx_quote.h>
+
+namespace {
+    // pub_key_id is expected to be small; cap request buffer to prevent abuse.
+    static const size_t MAX_PUB_KEY_ID_BUF_SIZE = 4096;
+}
 
 
 AEInitQuoteExRequest::AEInitQuoteExRequest(const aesm::message::Request::InitQuoteExRequest& request) :
@@ -53,8 +59,7 @@ AEInitQuoteExRequest::AEInitQuoteExRequest(uint32_t att_key_id_size, const uint8
     if (att_key_id_size != 0 && att_key_id != NULL)
         m_request->set_att_key_id(att_key_id, att_key_id_size);
     m_request->set_b_pub_key_id(b_pub_key_id);
-    if (buf_size != 0)
-        m_request->set_buf_size(buf_size);
+    m_request->set_buf_size(buf_size);
     m_request->set_timeout(timeout);
 }
 
@@ -95,7 +100,30 @@ bool AEInitQuoteExRequest::check()
 {
     if (m_request == NULL)
         return false;
-    return m_request->IsInitialized();
+    if (!m_request->IsInitialized())
+        return false;
+
+    if (!m_request->has_att_key_id() ||
+        m_request->att_key_id().size() != sizeof(sgx_att_key_id_t))
+        return false;
+
+    if (!m_request->has_buf_size())
+        return false;
+
+    if (m_request->b_pub_key_id())
+    {
+        if (m_request->buf_size() > MAX_PUB_KEY_ID_BUF_SIZE)
+            return false;
+        if (m_request->buf_size() == 0)
+            return false;
+    }
+    else
+    {
+        if (m_request->buf_size() != 0)
+            return false;
+    }
+
+    return true;
 }
 
 IAERequest::RequestClass AEInitQuoteExRequest::getRequestClass() {
@@ -137,11 +165,8 @@ IAEResponse* AEInitQuoteExRequest::execute(IAESMLogic* aesmLogic)
 
         bool b_pub_key_id = m_request->b_pub_key_id();
 
-        if (m_request->has_buf_size())
-	{
-            pub_key_id_size = (size_t)m_request->buf_size();
-            buf_size = pub_key_id_size;
-	}
+        pub_key_id_size = (size_t)m_request->buf_size();
+        buf_size = pub_key_id_size;
 
         result= aesmLogic->init_quote_ex(
                 att_key_id_size, att_key_id,
@@ -152,6 +177,6 @@ IAEResponse* AEInitQuoteExRequest::execute(IAESMLogic* aesmLogic)
     if (target_info)
         delete[] target_info;
     if (pub_key_id)
-        delete pub_key_id;
+        delete[] pub_key_id;
     return response;
 }

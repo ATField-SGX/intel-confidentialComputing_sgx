@@ -37,6 +37,7 @@
 #include <stdlib.h>
 #include <limits.h>
 #include <IAEMessage.h>
+#include <sgx_quote.h>
 
 AEGetSupportedAttKeyIDsRequest::AEGetSupportedAttKeyIDsRequest(const aesm::message::Request::GetSupportedAttKeyIDsRequest& request) :
     m_request(NULL)
@@ -104,7 +105,17 @@ bool AEGetSupportedAttKeyIDsRequest::check()
 {
     if (m_request == NULL)
         return false;
-    return m_request->IsInitialized();
+    if (!m_request->IsInitialized())
+        return false;
+
+    const uint32_t buf_size = m_request->buf_size();
+    if (buf_size == 0)
+        return false;
+
+    if (buf_size % sizeof(sgx_att_key_id_ext_t) != 0)
+        return false;
+
+    return true;
 }
 
 IAERequest::RequestClass AEGetSupportedAttKeyIDsRequest::getRequestClass()

@@ -50,28 +50,54 @@
 
 #include <AEGetSupportedAttKeyIDsRequest.h>
 
+#include <climits>
+
 
 IAERequest* ProtobufSerializer::inflateRequest(AEMessage* message) {
     if (message == NULL || message->data == NULL)
         return NULL;
 
-    aesm::message::Request* reqMsg = new aesm::message::Request();
+    if (message->size == 0 || message->size > INT_MAX)
+        return NULL;
 
-    reqMsg->ParseFromArray(message->data, message->size);
+    aesm::message::Request reqMsg;
+    if (!reqMsg.ParseFromArray(message->data, static_cast<int>(message->size)))
+        return NULL;
+
+    if (reqMsg.has_reporterrreq())
+        return NULL;
+
+    int request_count = 0;
+    if (reqMsg.has_initquoteexreq())
+        ++request_count;
+    if (reqMsg.has_getquotesizeexreq())
+        ++request_count;
+    if (reqMsg.has_getquoteexreq())
+        ++request_count;
+    if (reqMsg.has_selectattkeyidreq())
+        ++request_count;
+    if (reqMsg.has_getsupportedattkeyidnumreq())
+        ++request_count;
+    if (reqMsg.has_getsupportedattkeyidsreq())
+        ++request_count;
+
+    // AESM IPC accepts exactly one request payload per message.
+    if (request_count != 1)
+        return NULL;
+
     IAERequest* request = NULL;
-    if (reqMsg->has_initquoteexreq() == true)
-        request = new AEInitQuoteExRequest(reqMsg->initquoteexreq());
-    else if(reqMsg->has_getquotesizeexreq() == true)
-        request = new AEGetQuoteSizeExRequest(reqMsg->getquotesizeexreq());
-    else if(reqMsg->has_getquoteexreq() == true)
-        request = new AEGetQuoteExRequest(reqMsg->getquoteexreq());
-    else if(reqMsg->has_selectattkeyidreq() == true)
-        request = new AESelectAttKeyIDRequest(reqMsg->selectattkeyidreq());
-    else if(reqMsg->has_getsupportedattkeyidnumreq() == true)
-        request = new AEGetSupportedAttKeyIDNumRequest(reqMsg->getsupportedattkeyidnumreq());
-    else if(reqMsg->has_getsupportedattkeyidsreq() == true)
-        request = new AEGetSupportedAttKeyIDsRequest(reqMsg->getsupportedattkeyidsreq());
+    if (reqMsg.has_initquoteexreq() == true)
+        request = new AEInitQuoteExRequest(reqMsg.initquoteexreq());
+    else if(reqMsg.has_getquotesizeexreq() == true)
+        request = new AEGetQuoteSizeExRequest(reqMsg.getquotesizeexreq());
+    else if(reqMsg.has_getquoteexreq() == true)
+        request = new AEGetQuoteExRequest(reqMsg.getquoteexreq());
+    else if(reqMsg.has_selectattkeyidreq() == true)
+        request = new AESelectAttKeyIDRequest(reqMsg.selectattkeyidreq());
+    else if(reqMsg.has_getsupportedattkeyidnumreq() == true)
+        request = new AEGetSupportedAttKeyIDNumRequest(reqMsg.getsupportedattkeyidnumreq());
+    else if(reqMsg.has_getsupportedattkeyidsreq() == true)
+        request = new AEGetSupportedAttKeyIDsRequest(reqMsg.getsupportedattkeyidsreq());
 
-    delete reqMsg;
     return request;
 }

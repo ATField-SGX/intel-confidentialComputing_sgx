@@ -290,8 +290,8 @@ aesm_error_t AESMLogicWrapper::init_quote_ex(
     size_t output_pub_key_id_size = 0;
     if (b_pub_key_id)
     {
-        output_pub_key_id = new uint8_t[sizeof(sgx_sha256_hash_t)]();
         output_pub_key_id_size = *pub_key_id_size;
+        output_pub_key_id = new uint8_t[output_pub_key_id_size]();
     }
 
     aesm_error_t result = AESM_SERVICE_UNAVAILABLE;
@@ -446,7 +446,7 @@ ae_error_t AESMLogicWrapper::service_start()
     }
     {
         std::shared_ptr<IQuoteProxyService> service;
-        if (get_service_wrapper(service, g_fw_ctx)) 
+        if (get_service_wrapper(service, g_fw_ctx))
         {
             service->set_supported_attestation_types(supported_attestation_types);
             ae_error_t ret = service->start();

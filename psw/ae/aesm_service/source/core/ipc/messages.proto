@@ -45,7 +45,7 @@ message Request{
     message InitQuoteExRequest{
         optional    bytes  att_key_id              = 1;
         required    bool   b_pub_key_id            = 3;
-        optional    uint64 buf_size                = 4;
+        required    uint64 buf_size                = 4;
         optional    uint32 timeout                 = 9;
     }
 
@@ -118,7 +118,7 @@ message Response{
         required    uint32 errorCode    = 1 [default = 1];
         optional    uint32 quote_size   = 2;
     }
-	
+
     message GetQuoteExResponse{
         required    uint32 errorCode      = 1 [default = 1];
         optional    bytes  quote          = 2;
@@ -134,7 +134,7 @@ message Response{
         required    uint32  errorCode      = 1 [default = 1];
         optional    uint32  att_key_id_num = 2;
     }
-	
+
     message GetSupportedAttKeyIDsResponse{
         required    uint32  errorCode      = 1 [default = 1];
         optional    bytes   att_key_ids    = 2;
