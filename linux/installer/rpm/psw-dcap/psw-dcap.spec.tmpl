@@ -62,7 +62,8 @@ BuildRequires:  openssl-devel
 BuildRequires:  protobuf-compiler
 BuildRequires:  protobuf-devel
 BuildRequires:  libcurl-devel
-BuildRequires:  python2
+BuildRequires:  boost-devel
+BuildRequires:  python3
 BuildRequires:  perl
 BuildRequires:  nasm
 
@@ -379,7 +380,7 @@ if [ -x %{_aesm_service_path}/cleanup.sh ]; then %{_aesm_service_path}/cleanup.s
 if [ -x %{_dcap_pccs_path}/startup.sh ]; then %{_dcap_pccs_path}/startup.sh; fi
 
 %preun -n sgx-dcap-pccs
-if [ -x %{_dcap_pccs_path}/cleanup.sh ]; then %{_dcap_pccs_path}/cleanup.sh; fi
+if [ "$1" -eq 0 ] && [ -x %{_dcap_pccs_path}/uninstall.sh ]; then %{_dcap_pccs_path}/uninstall.sh; fi
 
 %posttrans -n sgx-ra-service
 if [ -x %{_ra_service_path}/startup.sh ]; then %{_ra_service_path}/startup.sh; fi

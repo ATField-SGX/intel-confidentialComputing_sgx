@@ -47,11 +47,11 @@ make -C ${root_dir} preparation
 # Prepare ipp-crypto source
 pushd ${root_dir}/external/ippcp_internal/
 
-cd ipp-crypto && git apply ../0001-IPP-crypto-for-SGX_psw_dcap.patch >/dev/null 2>&1 ||  git apply ../0001-IPP-crypto-for-SGX_psw_dcap.patch --check -R
+cd ipp-crypto && git apply ../0001-Cryptography-Primitives-for-SGX.patch >/dev/null 2>&1 || git apply ../0001-Cryptography-Primitives-for-SGX.patch --check -R
 
 popd
 
-python ${common_dir}/gen_source/copy_source.py                          \
+python3 ${common_dir}/gen_source/copy_source.py                         \
       --bom-file ${common_psw_tdx_dir}/BOM_source/psw-tdx-tarball.txt \
       --src-path ${root_dir}                                            \
       --dst-path ${tarball_dir}                                         \

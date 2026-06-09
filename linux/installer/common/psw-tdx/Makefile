@@ -91,7 +91,7 @@ TEST_COPYABLE = \( -d $1 -a -n "$$(shell ls -A $1 2> /dev/null)" \)
 
 define PRE_INSTALL_TEMPLATE
 pre_$(1): | $(PACKAGE_ROOT_PATH)
-	python $(GEN_SCRIPT) --bom-file $(BOM_PATH)/$(1).txt \
+	python3 $(GEN_SCRIPT) --bom-file $(BOM_PATH)/$(1).txt \
 			--src-path $(SRCDIR) --dst-path $$|/$(1)
 endef
 

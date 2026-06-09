@@ -1,6 +1,7 @@
 DeliveryName	InstallName	FileCheckSum	FileFeature	FileOwner
 <deliverydir>/common	<installdir>/common	0	main	STP
 <deliverydir>/external	<installdir>/external	0	main	STP
+<deliverydir>/prebuilt/dcap/openssl	<installdir>/prebuilt/dcap/openssl	0	main	STP
 <deliverydir>/psw/enclave_common	<installdir>/psw/enclave_common	0	main	STP
 <deliverydir>/psw/urts	<installdir>/psw/urts	0	main	STP
 <deliverydir>/psw/ae/inc	<installdir>/psw/ae/inc	0	main	STP

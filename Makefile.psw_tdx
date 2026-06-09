@@ -46,7 +46,17 @@ psw: install_sdk
 	@$(MAKE) -C psw/urts/linux/ USE_OPT_LIBS=$(USE_OPT_LIBS)
 
 dcap: install_sdk
-	@$(MAKE) -C external/dcap_source/
+	# Workaround until fixed in DCAP: prebuild race-prone targets, then skip
+	# re-entering them in the full DCAP build; build only RPM PcsClientTool.
+	@$(MAKE) -C external/dcap_source/external
+	@$(MAKE) -j1 -C external/dcap_source/ QuoteVerification
+	@$(MAKE) -j1 -C external/dcap_source/ PCKCertSelection
+	# The default PckClientTool target also builds DEB packages and needs dpkg.
+	@$(MAKE) -C external/dcap_source/tools/PcsClientTool rpm_sgx_pcs_client_pkg
+	# WinPle targets build Windows PLE artifacts, not Linux RPM content. 
+	#  Note: if wanting to build them, and using OpenSSL 3x CLI, make sure to use --traditional for PLE signing key generation
+	@$(MAKE) -C external/dcap_source/ -o ThirdParty -o QuoteVerification -o PCKCertSelection -o PckClientTool -o WinPle -o WinPleIntel
+
 
 install:
 	@$(MAKE) -I linux/installer/common/psw-tdx -f linux/installer/common/psw-tdx/Makefile SRCDIR=. DESTDIR=$(DESTDIR) install
