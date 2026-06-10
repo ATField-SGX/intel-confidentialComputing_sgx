@@ -40,6 +40,8 @@ cur_dir=$(dirname "$0")
 root_dir="${cur_dir}/../../../../"
 common_dir="${root_dir}/linux/installer/common"
 common_psw_tdx_dir="${common_dir}/${psw_tdx}"
+# v-- ENCLAVE_RUNTIME_EXTRACT: update this path to the SDK submodule once sgx-enclave-runtime is extracted to the standalone SDK repo
+enclave_runtime_dir="${common_dir}/sgx-enclave-runtime"
 tarball_dir="${cur_dir}/${tarball}"
 
 make -C ${root_dir} preparation
@@ -53,9 +55,14 @@ popd
 
 python3 ${common_dir}/gen_source/copy_source.py                         \
       --bom-file ${common_psw_tdx_dir}/BOM_source/psw-tdx-tarball.txt \
-      --src-path ${root_dir}                                            \
+      --src-path ${root_dir}                                           \
       --dst-path ${tarball_dir}                                         \
       --cleanup
+
+python3 ${common_dir}/gen_source/copy_source.py                                   \
+      --bom-file ${enclave_runtime_dir}/BOM_source/sgx-enclave-runtime-tarball.txt \
+      --src-path ${root_dir}                                                    \
+      --dst-path ${tarball_dir}
 
 tar -zcvf ${tarball}.tar.gz -C ${cur_dir} ${tarball}
 rm -fr ${tarball_dir}

@@ -1,7 +1,3 @@
-SGX_HEADERS_PACKAGE=libsgx-headers
-URTS_PACKAGE=libsgx-urts
-ENCLAVE_COMMON_PACKAGE=libsgx-enclave-common
-ENCLAVE_COMMON_DEV_PACKAGE=libsgx-enclave-common-devel
 QUOTE_EX_PACKAGE=libsgx-quote-ex
 QUOTE_EX_DEV_PACKAGE=libsgx-quote-ex-devel
 UAE_SERVICE_PACKAGE=libsgx-uae-service
