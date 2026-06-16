@@ -38,7 +38,6 @@
 #include <sys/types.h>
 #include <regex.h>
 #include <stdio.h>
-#include "sgx_safe_file_ops.h"
 
 #define AESM_CONFIG_FILE "/etc/aesmd.conf"
 #define MAX_LINE 1024
@@ -223,7 +222,7 @@ bool read_aesm_config(aesm_config_infos_t& infos)
 
     infos.proxy_type = AESM_PROXY_TYPE_DEFAULT_PROXY;
     infos.quoting_type = AESM_QUOTING_DEFAULT_VALUE;
-    FILE *f =sgx_safe_fopen(AESM_CONFIG_FILE, "r");
+    FILE *f =fopen(AESM_CONFIG_FILE, "r");
     if(f==NULL){
          AESM_DBG_ERROR("Cannnot read aesm config file %s",AESM_CONFIG_FILE);
          return false;
