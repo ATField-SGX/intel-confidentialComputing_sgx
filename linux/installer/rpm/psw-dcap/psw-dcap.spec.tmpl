@@ -62,7 +62,8 @@ BuildRequires:  openssl-devel
 BuildRequires:  protobuf-compiler
 BuildRequires:  protobuf-devel
 BuildRequires:  libcurl-devel
-BuildRequires:  python2
+BuildRequires:  boost-devel
+BuildRequires:  python3
 BuildRequires:  perl
 BuildRequires:  nasm
 
@@ -116,21 +117,6 @@ Requires:      libsgx-quote-ex = %{version}-%{release} libsgx-headers >= %{versi
 %description -n libsgx-quote-ex-devel
 Intel(R) Software Guard Extensions Unified Quote Service for Developers
 
-%package -n libsgx-headers
-Version:       %{_psw_version}
-Summary:       Intel(R) Software Guard Extensions Basic Headers
-
-%description -n libsgx-headers
-Intel(R) Software Guard Extensions Basic Headers
-
-%package -n libsgx-urts
-Version:       %{_psw_version}
-Summary:       Intel(R) Software Guard Extensions uRTS
-Requires:      libsgx-enclave-common >= %{version}-%{release}
-
-%description -n libsgx-urts
-Intel(R) Software Guard Extensions uRTS
-
 %package -n libsgx-uae-service
 Version:       %{_psw_version}
 Summary:       Intel(R) Software Guard Extensions Untrusted AE Service
@@ -138,21 +124,6 @@ Requires:      libsgx-quote-ex >= %{version}-%{release}
 
 %description -n libsgx-uae-service
 Intel(R) Software Guard Extensions Untrusted AE Service
-
-%package -n libsgx-enclave-common
-Version:       %{_psw_version}
-Summary:       Intel(R) Software Guard Extensions Enclave Common Loader
-
-%description -n libsgx-enclave-common
-Intel(R) Software Guard Extensions Enclave Common Loader
-
-%package -n libsgx-enclave-common-devel
-Version:       %{_psw_version}
-Summary:       Intel(R) Software Guard Extensions Enclave Common Loader for Developers
-Requires:      libsgx-enclave-common = %{version}-%{release} libsgx-headers >= %{version}-%{release}
-
-%description -n libsgx-enclave-common-devel
-Intel(R) Software Guard Extensions Enclave Common Loader for Developers
 
 %package -n libsgx-ae-id-enclave
 Version:       %{_dcap_version}
@@ -304,6 +275,11 @@ make %{?_smp_mflags} build
 make DESTDIR=%{?buildroot} install
 
 for pkg in $(ls -A %{?buildroot} 2> /dev/null |grep -v "license"); do
+    # Runtime libraries are owned by the sgx-enclave-runtime package now;
+    # discard them here instead of packaging them.
+    case " libsgx-headers libsgx-urts libsgx-enclave-common libsgx-enclave-common-devel " in
+        *" ${pkg} "*) rm -fr %{?buildroot}/${pkg}; continue ;;
+    esac
     install -d %{?buildroot}/${pkg}/%{_docdir}/${pkg}
     find %{?buildroot}/license -type f -print0 | \
     xargs -0 -n1 cat >> %{?buildroot}/${pkg}/%{_docdir}/${pkg}/%{_license_file}
@@ -345,11 +321,7 @@ make clean
 %files -n libsgx-aesm-quote-ex-plugin -f %{_specdir}/list-libsgx-aesm-quote-ex-plugin
 %files -n libsgx-quote-ex -f %{_specdir}/list-libsgx-quote-ex
 %files -n libsgx-quote-ex-devel -f %{_specdir}/list-libsgx-quote-ex-devel
-%files -n libsgx-headers -f %{_specdir}/list-libsgx-headers
-%files -n libsgx-urts -f %{_specdir}/list-libsgx-urts
 %files -n libsgx-uae-service -f %{_specdir}/list-libsgx-uae-service
-%files -n libsgx-enclave-common -f %{_specdir}/list-libsgx-enclave-common
-%files -n libsgx-enclave-common-devel -f %{_specdir}/list-libsgx-enclave-common-devel
 %files -n libsgx-ae-id-enclave -f %{_specdir}/list-libsgx-ae-id-enclave
 %files -n libsgx-ae-qe3 -f %{_specdir}/list-libsgx-ae-qe3
 %files -n libsgx-ae-qve -f %{_specdir}/list-libsgx-ae-qve
@@ -379,24 +351,13 @@ if [ -x %{_aesm_service_path}/cleanup.sh ]; then %{_aesm_service_path}/cleanup.s
 if [ -x %{_dcap_pccs_path}/startup.sh ]; then %{_dcap_pccs_path}/startup.sh; fi
 
 %preun -n sgx-dcap-pccs
-if [ -x %{_dcap_pccs_path}/cleanup.sh ]; then %{_dcap_pccs_path}/cleanup.sh; fi
+if [ "$1" -eq 0 ] && [ -x %{_dcap_pccs_path}/uninstall.sh ]; then %{_dcap_pccs_path}/uninstall.sh; fi
 
 %posttrans -n sgx-ra-service
 if [ -x %{_ra_service_path}/startup.sh ]; then %{_ra_service_path}/startup.sh; fi
 
 %preun -n sgx-ra-service
 if [ -x %{_ra_service_path}/cleanup.sh ]; then %{_ra_service_path}/cleanup.sh; fi
-
-%post -n libsgx-enclave-common
-trigger_udev() {
-    if ! which udevadm &> /dev/null; then
-        return 0
-    fi
-    udevadm control --reload || :
-    udevadm trigger || :
-}
-
-trigger_udev
 
 %post -n libsgx-ae-pce
 trigger_udev() {

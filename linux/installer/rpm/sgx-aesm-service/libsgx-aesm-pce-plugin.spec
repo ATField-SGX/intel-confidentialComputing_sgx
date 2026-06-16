@@ -12,7 +12,7 @@ Version:        @version@
 Release:        1%{?dist}
 Summary:        PCE Plugin for Intel(R) Software Guard Extensions AESM Service
 Group:          Development/System
-Requires:       sgx-aesm-service >= %{version}-%{release} libsgx-pce-logic >= 1.26 libsgx-ae-pce >= %{version}-%{release}
+Requires:       sgx-aesm-service >= %{version}-%{release} libsgx-pce-logic >= 1.27 libsgx-ae-pce >= %{version}-%{release}
 
 License:        BSD License
 URL:            https://github.com/intel/linux-sgx
@@ -42,7 +42,23 @@ rm -fr %{?buildroot}/%{name}
 
 %files -f %{_specdir}/list-%{name}
 
+# Detect whether rpmbuild has modern auto-debuginfo support (rpm >= 4.14).
+# We use this to keep one spec compatible across old/new RPM and only enable
+# legacy debug_package handling when auto-debuginfo is not available.
+%global __auto_debuginfo %{lua:
+  local v = rpm.expand("%{rpmversion}")
+  local maj, min = v:match("^(%d+)%.(%d+)")
+  maj, min = tonumber(maj), tonumber(min)
+  -- Unparseable version: assume modern RPM, skip legacy debug_package
+  if not (maj and min) then print("1")
+  elseif maj > 4 or (maj == 4 and min >= 14) then print("1")
+  else print("0")
+  end
+}
+
+%if 0%{?__auto_debuginfo} == 0
 %debug_package
+%endif
 
 %changelog
 * Mon Jul 29 2019 SGX Team

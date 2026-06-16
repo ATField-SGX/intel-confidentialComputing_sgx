@@ -36,10 +36,16 @@
 #include <stdlib.h>
 #include <limits.h>
 #include <IAEMessage.h>
+#include <sgx_quote.h>
+#include <sgx_report.h>
+
+namespace {
+const uint32_t MAX_GET_QUOTE_EX_BUFFER_SIZE = 1024 * 1024;
+}
 
 
-    AEGetQuoteExRequest::AEGetQuoteExRequest(const aesm::message::Request::GetQuoteExRequest& request) :
-    m_request(NULL)
+AEGetQuoteExRequest::AEGetQuoteExRequest(const aesm::message::Request::GetQuoteExRequest& request)
+    :m_request(NULL)
 {
     m_request = new aesm::message::Request::GetQuoteExRequest();
     m_request->CopyFrom(request);
@@ -112,7 +118,22 @@ bool AEGetQuoteExRequest::check()
 {
     if (m_request == NULL)
         return false;
-    return m_request->IsInitialized();
+    if (!m_request->IsInitialized())
+        return false;
+
+    if (m_request->report().size() != sizeof(sgx_report_t))
+        return false;
+
+    if (!m_request->has_att_key_id() ||
+        m_request->att_key_id().size() != sizeof(sgx_att_key_id_t))
+        return false;
+
+    if (m_request->has_qe_report_info() &&
+        m_request->qe_report_info().size() != sizeof(sgx_qe_report_info_t))
+        return false;
+
+    return m_request->buf_size() > 0 &&
+        m_request->buf_size() <= MAX_GET_QUOTE_EX_BUFFER_SIZE;
 }
 
 IAERequest::RequestClass AEGetQuoteExRequest::getRequestClass() {

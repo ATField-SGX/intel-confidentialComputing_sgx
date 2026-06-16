@@ -23,8 +23,8 @@ QVE_FULL_VER:= $(call ACQUIRE_DCAP_VERSION,QVE_VERSION)
 QVE_MAJOR_VER:=$(word 1,$(subst ., ,$(QVE_FULL_VER)))
 PCE_LOGIC_FULL_VER:= $(call ACQUIRE_DCAP_VERSION,PCE_WRAPPER_VERSION)
 PCE_LOGIC_MAJOR_VER:=$(word 1,$(subst ., ,$(PCE_LOGIC_FULL_VER)))
-ECL_FULL_VER:= $(call ACQUIRE_PSW_VERSION,ENCLAVE_COMMON_VERSION)
-ECL_MAJOR_VER:=$(word 1,$(subst ., ,$(ECL_FULL_VER)))
+# v-- uRTS now lives in sgx-enclave-runtime; kept here only for the AESM-private
+# liburts_internal.so -> libsgx_urts.so.$(URTS_MAJOR_VER) symlink below.
 URTS_FULL_VER:= $(call ACQUIRE_PSW_VERSION,URTS_VERSION)
 URTS_MAJOR_VER:=$(word 1,$(subst ., ,$(URTS_FULL_VER)))
 UAE_SERVICE_FULL_VER:= $(call ACQUIRE_PSW_VERSION,UAE_SERVICE_VERSION)
@@ -47,6 +47,8 @@ RAU_MAJOR_VER:=$(word 1,$(subst ., ,$(RAU_FULL_VER)))
 CUR_PATH:=$(realpath $(dir $(lastword $(MAKEFILE_LIST))))
 BOM_PATH:=$(CUR_PATH)/BOM_install
 GEN_SCRIPT:=$(realpath $(CUR_PATH)/../gen_source/copy_source.py)
+# v-- ENCLAVE_RUNTIME_EXTRACT: update this path to the SDK submodule once sgx-enclave-runtime is extracted to the standalone SDK repo
+ENCLAVE_RUNTIME_DIR:=$(realpath $(CUR_PATH)/../sgx-enclave-runtime)
 
 PACKAGE_ROOT_PATH:=$(SRCDIR)/build/pkgroot
 
@@ -70,7 +72,7 @@ TEST_COPYABLE = \( -d $1 -a -n "$$(shell ls -A $1 2> /dev/null)" \)
 
 define PRE_INSTALL_TEMPLATE
 pre_$(1): | $(PACKAGE_ROOT_PATH)
-	python $(GEN_SCRIPT) --bom-file $(BOM_PATH)/$(1).txt \
+	python3 $(GEN_SCRIPT) --bom-file $(BOM_PATH)/$(1).txt \
 			--src-path $(SRCDIR) --dst-path $$|/$(1)
 endef
 
@@ -128,11 +130,7 @@ AE_PKGS:= $(AE_IDE_PACKAGE)                  \
 
 DEV_LIB_PKGS:= $(QUOTE_EX_PACKAGE)           \
                $(QUOTE_EX_DEV_PACKAGE)       \
-               $(ENCLAVE_COMMON_PACKAGE)     \
-               $(ENCLAVE_COMMON_DEV_PACKAGE) \
                $(UAE_SERVICE_PACKAGE)        \
-               $(URTS_PACKAGE)               \
-               $(SGX_HEADERS_PACKAGE)        \
                $(DCAP_QPL_PACKAGE)           \
                $(DCAP_QPL_DEV_PACKAGE)       \
                $(DCAP_QL_PACKAGE)            \
@@ -148,7 +146,16 @@ ALL_PKGS:= $(AESM_SERVICE_PKGS) $(AE_PKGS) $(DEV_LIB_PKGS)
 
 $(foreach PKG,$(AESM_SERVICE_PKGS) $(AE_PKGS),$(eval $(call INSTALL_AESM_SERVICE_TEMPLATE,$(PKG))))
 $(foreach PKG,$(DEV_LIB_PKGS),$(eval $(call INSTALL_DEV_LIB_TEMPLATE,$(PKG))))
-$(foreach PKG,$(ALL_PKGS) $(DCAP_PCCS_PACKAGE) $(RA_SERVICE_PACKAGE) $(PCK_ID_RETRIEVAL_TOOL_PACKAGE),$(eval $(call PRE_INSTALL_TEMPLATE,$(PKG))))
+$(foreach PKG,$(AESM_SERVICE_PKGS) $(AE_PKGS) $(DEV_LIB_PKGS) $(DCAP_PCCS_PACKAGE) $(RA_SERVICE_PACKAGE) $(PCK_ID_RETRIEVAL_TOOL_PACKAGE),$(eval $(call PRE_INSTALL_TEMPLATE,$(PKG))))
+
+# Enclave runtime libraries and developer headers are delegated to sgx-enclave-runtime
+PHONY+=install_enclave_runtime
+install_enclave_runtime:
+	$(MAKE) -I $(ENCLAVE_RUNTIME_DIR) -f $(ENCLAVE_RUNTIME_DIR)/Makefile SRCDIR=$(SRCDIR) DESTDIR=$(DESTDIR) ENCLAVE_RUNTIME_MAKEFILE_DIR=$(ENCLAVE_RUNTIME_DIR) install-runtime
+
+PHONY+=install_enclave_runtime_dev
+install_enclave_runtime_dev:
+	$(MAKE) -I $(ENCLAVE_RUNTIME_DIR) -f $(ENCLAVE_RUNTIME_DIR)/Makefile SRCDIR=$(SRCDIR) DESTDIR=$(DESTDIR) ENCLAVE_RUNTIME_MAKEFILE_DIR=$(ENCLAVE_RUNTIME_DIR) install-dev
 
 PHONY+=$(ALL_PKGS)
 PHONY+=$(foreach PKG,$(ALL_PKGS),pre_$(PKG))
@@ -234,26 +241,16 @@ install_ae: $(foreach PKG,$(AE_PKGS),post_$(PKG))
 	ln -fs libsgx_pce_logic.so.$(PCE_LOGIC_MAJOR_VER) libsgx_pce_logic.so
 
 PHONY+=install_dev_lib
-install_dev_lib: $(foreach PKG,$(DEV_LIB_PKGS),post_$(PKG))
-	rm -fr $(shell readlink -m $(DESTDIR)/$(SGX_HEADERS_PACKAGE)/$(USR_LIB_PATH))
+install_dev_lib: install_enclave_runtime_dev $(foreach PKG,$(DEV_LIB_PKGS),post_$(PKG))
 	cd $(shell readlink -m $(DESTDIR)/$(QUOTE_EX_PACKAGE)/$(USR_LIB_PATH))     && \
 	mv libsgx_quote_ex.so libsgx_quote_ex.so.$(QUOTE_EX_FULL_VER)              && \
 	ln -fs libsgx_quote_ex.so.$(QUOTE_EX_FULL_VER) libsgx_quote_ex.so.$(QUOTE_EX_MAJOR_VER)
 	cd $(shell readlink -m $(DESTDIR)/$(QUOTE_EX_DEV_PACKAGE)/$(USR_LIB_PATH)) && \
 	ln -fs libsgx_quote_ex.so.$(QUOTE_EX_MAJOR_VER) libsgx_quote_ex.so
-	cd $(shell readlink -m $(DESTDIR)/$(ENCLAVE_COMMON_PACKAGE)/$(USR_LIB_PATH))     && \
-	mv libsgx_enclave_common.so libsgx_enclave_common.so.$(ECL_FULL_VER)             && \
-	ln -fs libsgx_enclave_common.so.$(ECL_FULL_VER) libsgx_enclave_common.so.$(ECL_MAJOR_VER)
-	cd $(shell readlink -m $(DESTDIR)/$(ENCLAVE_COMMON_DEV_PACKAGE)/$(USR_LIB_PATH)) && \
-	ln -fs libsgx_enclave_common.so.$(ECL_MAJOR_VER) libsgx_enclave_common.so
 	cd $(shell readlink -m $(DESTDIR)/$(UAE_SERVICE_PACKAGE)/$(USR_LIB_PATH))                           && \
 	mv libsgx_uae_service.so libsgx_uae_service.so.$(UAE_SERVICE_FULL_VER)                              && \
 	ln -fs libsgx_uae_service.so.$(UAE_SERVICE_FULL_VER) libsgx_uae_service.so.$(UAE_SERVICE_MAJOR_VER) && \
 	ln -fs libsgx_uae_service.so.$(UAE_SERVICE_MAJOR_VER) libsgx_uae_service.so
-	cd $(shell readlink -m $(DESTDIR)/$(URTS_PACKAGE)/$(USR_LIB_PATH))      && \
-	mv libsgx_urts.so libsgx_urts.so.$(URTS_FULL_VER)                       && \
-	ln -fs libsgx_urts.so.$(URTS_FULL_VER) libsgx_urts.so.$(URTS_MAJOR_VER) && \
-	ln -fs libsgx_urts.so.$(URTS_MAJOR_VER) libsgx_urts.so
 	cd $(shell readlink -m $(DESTDIR)/$(DCAP_QPL_PACKAGE)/$(USR_LIB_PATH))            && \
 	mv libdcap_quoteprov.so libdcap_quoteprov.so.$(QPL_FULL_VER)                      && \
 	ln -fs libdcap_quoteprov.so.$(QPL_FULL_VER) libdcap_quoteprov.so.$(QPL_MAJOR_VER) && \
@@ -290,6 +287,7 @@ install: install_$(AESM_SERVICE_PACKAGE)         \
 	install_$(RA_SERVICE_PACKAGE)            \
 	install_$(PCK_ID_RETRIEVAL_TOOL_PACKAGE) \
 	install_ae                               \
+	install_enclave_runtime                  \
 	install_dev_lib
 	rm -fr $(PACKAGE_ROOT_PATH)
 	mkdir -p $(DESTDIR)/license

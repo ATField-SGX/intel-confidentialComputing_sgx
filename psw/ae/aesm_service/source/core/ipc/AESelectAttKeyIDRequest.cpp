@@ -34,8 +34,14 @@
 #include <IAESMLogic.h>
 
 #include <stdlib.h>
+#include <string.h>
 #include <limits.h>
 #include <IAEMessage.h>
+#include <sgx_ql_quote.h>
+
+// Define a reasonable maximum number of attestation key IDs to prevent potential abuse
+// This is the same limit we set in server side.
+static const size_t SGX_MAX_ATT_KEY_IDS = 10;
 
 AESelectAttKeyIDRequest::AESelectAttKeyIDRequest(const aesm::message::Request::SelectAttKeyIDRequest &request) : m_request(NULL)
 {
@@ -86,7 +92,30 @@ bool AESelectAttKeyIDRequest::check()
 {
     if (m_request == NULL)
         return false;
-    return m_request->IsInitialized();
+    if (!m_request->IsInitialized())
+        return false;
+
+    if (m_request->has_att_key_id_list()) {
+        const size_t list_size = m_request->att_key_id_list().size();
+        if (list_size < sizeof(sgx_ql_att_key_id_list_header_t) + sizeof(sgx_att_key_id_ext_t))
+            return false;
+
+        sgx_ql_att_key_id_list_header_t att_key_id_list_header;
+        memcpy(&att_key_id_list_header, m_request->att_key_id_list().data(), sizeof(att_key_id_list_header));
+        if (att_key_id_list_header.id != 0 || att_key_id_list_header.version != 0)
+            return false;
+
+        const size_t num_att_ids = att_key_id_list_header.num_att_ids;
+        if (num_att_ids > SGX_MAX_ATT_KEY_IDS)
+            return false;
+
+        const size_t expected_size =
+            sizeof(sgx_ql_att_key_id_list_header_t) + num_att_ids * sizeof(sgx_att_key_id_ext_t);
+        if (expected_size != list_size)
+            return false;
+    }
+
+    return true;
 }
 
 IAERequest::RequestClass AESelectAttKeyIDRequest::getRequestClass()

@@ -40,7 +40,9 @@
 class UnixServerSocket: public IServerSocket
 {
 public:
-    UnixServerSocket(const char* socketbase, const unsigned int clientTimeout = 0);
+    static const unsigned int DEFAULT_CLIENT_TIMEOUT_MILLISECONDS = 30000;
+
+    UnixServerSocket(const char* socketbase, const unsigned int clientTimeout = DEFAULT_CLIENT_TIMEOUT_MILLISECONDS);
     virtual ~UnixServerSocket();
 
     virtual void                    init();

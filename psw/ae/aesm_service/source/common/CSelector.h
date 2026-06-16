@@ -32,9 +32,10 @@
 #define _SELECTOR_H
 
 #include <list>
+#include <vector>
 #include "IServerSocket.h"
 #include <sys/socket.h>
-#include <sys/select.h>
+#include <sys/epoll.h>
 
 class ICommunicationSocket;
 
@@ -56,9 +57,20 @@ private:
     CSelector& operator=(const CSelector&);
     CSelector(const CSelector&);
 
+    void registerServerSocket();
+    void registerTerminationFd(int fd_term);
+    void addFd(int fd);
+    void removeFd(int fd);
+    ICommunicationSocket* detachSocket(int fd);
+
     IServerSocket* m_serverSock;
     std::list<ICommunicationSocket*> m_connectedSockets;
-    fd_set m_workingSet;
+    int m_epollFd;
+    int m_serverFd;
+    int m_terminationFd;
+    int m_eventCount;
+    bool m_canAcceptConnection;
+    std::vector<struct epoll_event> m_events;
 };
 
 #endif

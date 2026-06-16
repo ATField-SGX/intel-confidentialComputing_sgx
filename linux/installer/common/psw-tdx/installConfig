@@ -1,7 +1,3 @@
-SGX_HEADERS_PACKAGE=libsgx-headers
-URTS_PACKAGE=libsgx-urts
-ENCLAVE_COMMON_PACKAGE=libsgx-enclave-common
-ENCLAVE_COMMON_DEV_PACKAGE=libsgx-enclave-common-devel
 AE_PCE_PACKAGE=libsgx-ae-pce
 TDX_QGS_PACKAGE=tdx-qgs
 AE_IDE_PACKAGE=libsgx-ae-id-enclave

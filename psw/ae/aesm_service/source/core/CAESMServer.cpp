@@ -116,7 +116,12 @@ void CAESMServer::doWork()
         std::list<ICommunicationSocket*>::const_iterator it = socketsWithData.begin();
 
         for (;it != socketsWithData.end(); ++it) {
-            IAERequest  *request = m_transporter->receiveRequest(*it);  
+            IAERequest  *request = m_transporter->receiveRequest(*it);
+            if (request == NULL)
+            {
+                delete *it;
+                continue;
+            }
             RequestData *requestData = new RequestData(*it, request);   //deleted by the AESMWorkerThread after response is sent
             m_queueManager->enqueue(requestData);
         }
