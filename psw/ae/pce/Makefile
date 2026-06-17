@@ -42,7 +42,8 @@ INCLUDE += -I$(LINUX_PSW_DIR)/ae/data/constants/linux
 
 INCLUDE += -I$(SGX_HEADER_DIR)/libcxx                      \
            -I$(LINUX_PSW_DIR)/ae/common                   \
-           -I$(LINUX_PSW_DIR)/ae/inc/internal             
+           -I$(LINUX_PSW_DIR)/ae/inc/internal             \
+           -I$(DCAP_DIR)/ae/dep/inc/internal
 
 SRC := $(wildcard *.cpp)
 

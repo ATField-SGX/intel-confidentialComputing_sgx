@@ -40,6 +40,14 @@
 #include "arch.h"
 #include "le2be_macros.h"
 #include <assert.h>
+#include <string.h>
+#include <stdlib.h>
+#ifdef __linux__
+    // AEX Notify is only supported on Linux
+    #include "sgx_aex_notify_region.h"
+#else
+    #define SGX_REPEAT_AEX_REGION(BLOCK) BLOCK
+#endif
 
 ae_error_t get_ppid(ppid_t* ppid);
 ae_error_t get_pce_priv_key(const psvn_t* psvn, sgx_ec256_private_t* wrap_key);
@@ -49,6 +57,27 @@ ae_error_t get_pce_priv_key(const psvn_t* psvn, sgx_ec256_private_t* wrap_key);
 #define RSA_E_SIZE 4 //hardcode e size to be 4
 
 se_static_assert(RSA_MOD_SIZE == PEK_MOD_SIZE);
+
+#ifdef __linux__
+// AEX Notify is only supported on Linux
+__attribute__((constructor)) static void pce_global_init()
+{
+    sgx_status_t ret = SGX_SUCCESS;
+    if ((ret = sgx_register_aex_region_handler()) != SGX_SUCCESS)
+    {
+        abort();
+    }
+}
+
+__attribute__((destructor)) static void pce_global_dinit()
+{
+    sgx_status_t ret = SGX_SUCCESS;
+    if ((ret = sgx_unregister_aex_region_handler()) != SGX_SUCCESS)
+    {
+        abort();
+    }
+}
+#endif
 
 //Function to generate Current isvsvn from REPORT
 static ae_error_t get_isv_svn(sgx_isv_svn_t* isv_svn)
@@ -302,22 +331,26 @@ uint32_t certify_enclave(const psvn_t* cert_psvn,
         goto ret_point;
     }
 
-    sgx_status = sgx_ecdsa_sign(reinterpret_cast<const uint8_t *>(&report->body), sizeof(report->body),
-        pec_prv_key, reinterpret_cast<sgx_ec256_signature_t *>(signature), handle);
-    if (SGX_ERROR_OUT_OF_MEMORY == sgx_status)
-    {
-        ae_ret = AE_OUT_OF_MEMORY_ERROR;
-        goto ret_point;
-    }
-    else if (SGX_SUCCESS != sgx_status) {
-        ae_ret = AE_FAILURE;
-        goto ret_point;
-    }
-    sgx_status = sgx_ecc256_calculate_pub_from_priv(pec_prv_key, &ec_pub_key);
-    if (SGX_SUCCESS != sgx_status) {
-        ae_ret = AE_FAILURE;
-        goto ret_point;
-    }
+    SGX_REPEAT_AEX_REGION({
+        sgx_status = sgx_ecdsa_sign(reinterpret_cast<const uint8_t *>(&report->body), sizeof(report->body),
+                                    pec_prv_key, reinterpret_cast<sgx_ec256_signature_t *>(signature), handle);
+        if (SGX_ERROR_OUT_OF_MEMORY == sgx_status)
+        {
+            ae_ret = AE_OUT_OF_MEMORY_ERROR;
+            goto ret_point;
+        }
+        else if (SGX_SUCCESS != sgx_status)
+        {
+            ae_ret = AE_FAILURE;
+            goto ret_point;
+        }
+        sgx_status = sgx_ecc256_calculate_pub_from_priv(pec_prv_key, &ec_pub_key);
+        if (SGX_SUCCESS != sgx_status)
+        {
+            ae_ret = AE_FAILURE;
+            goto ret_point;
+        }
+    });
 
     sgx_status = sgx_ecdsa_verify(reinterpret_cast<const uint8_t *>(&report->body),
         sizeof(report->body),
