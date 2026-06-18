@@ -23,13 +23,13 @@ source ${SCRIPT_DIR}/installConfig
 cp ${LINUX_INSTALLER_COMMON_DIR}/gen_source/gen_source.py ${SCRIPT_DIR}
 
 # Copy the files according to the BOM
-python ${SCRIPT_DIR}/gen_source.py --bom=BOMs/libsgx-ae-pce.txt --cleanup=false --installdir=pkgroot/libsgx-ae-pce
-python ${SCRIPT_DIR}/gen_source.py --bom=BOMs/libsgx-aesm-ecdsa-plugin.txt --cleanup=false --installdir=pkgroot/libsgx-aesm-ecdsa-plugin
-python ${SCRIPT_DIR}/gen_source.py --bom=BOMs/libsgx-aesm-pce-plugin.txt --cleanup=false --installdir=pkgroot/libsgx-aesm-pce-plugin
-python ${SCRIPT_DIR}/gen_source.py --bom=BOMs/libsgx-aesm-quote-ex-plugin.txt --cleanup=false --installdir=pkgroot/libsgx-aesm-quote-ex-plugin
-python ${SCRIPT_DIR}/gen_source.py --bom=BOMs/sgx-aesm-service.txt --cleanup=false --installdir=pkgroot/sgx-aesm-service
-python ${SCRIPT_DIR}/gen_source.py --bom=BOMs/sgx-aesm-service-package.txt --cleanup=false
-python ${SCRIPT_DIR}/gen_source.py --bom=../licenses/BOM_license.txt --cleanup=false
+python3 ${SCRIPT_DIR}/gen_source.py --bom=BOMs/libsgx-ae-pce.txt --deliverydir=${ROOT_DIR} --cleanup=false --installdir=pkgroot/libsgx-ae-pce
+python3 ${SCRIPT_DIR}/gen_source.py --bom=BOMs/libsgx-aesm-ecdsa-plugin.txt --deliverydir=${ROOT_DIR} --cleanup=false --installdir=pkgroot/libsgx-aesm-ecdsa-plugin
+python3 ${SCRIPT_DIR}/gen_source.py --bom=BOMs/libsgx-aesm-pce-plugin.txt --deliverydir=${ROOT_DIR} --cleanup=false --installdir=pkgroot/libsgx-aesm-pce-plugin
+python3 ${SCRIPT_DIR}/gen_source.py --bom=BOMs/libsgx-aesm-quote-ex-plugin.txt --deliverydir=${ROOT_DIR} --cleanup=false --installdir=pkgroot/libsgx-aesm-quote-ex-plugin
+python3 ${SCRIPT_DIR}/gen_source.py --bom=BOMs/sgx-aesm-service.txt --deliverydir=${ROOT_DIR} --cleanup=false --installdir=pkgroot/sgx-aesm-service
+python3 ${SCRIPT_DIR}/gen_source.py --bom=BOMs/sgx-aesm-service-package.txt --deliverydir=${ROOT_DIR} --cleanup=false
+python3 ${SCRIPT_DIR}/gen_source.py --bom=../licenses/BOM_license.txt --deliverydir=${ROOT_DIR} --cleanup=false
 
 # Create the tarball
 PCE_VERSION=$(awk '/PCE_VERSION/ {print $3}' ${ROOT_DIR}/common/inc/internal/se_version.h|sed 's/^\"\(.*\)\"$/\1/')
