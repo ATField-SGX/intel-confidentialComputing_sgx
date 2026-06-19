@@ -11,8 +11,7 @@ docker build --target aesm_deb --build-arg https_proxy=$https_proxy \
 
 docker volume create --driver local --opt type=tmpfs --opt device=tmpfs --opt o=rw aesmd-socket
 
-# In-kernel driver (5.11+) uses /dev/sgx_enclave and /dev/sgx_provision;
-# old out-of-tree driver: /dev/isgx, and drop --device=/dev/sgx_provision.
+# In-kernel driver (5.11+) uses /dev/sgx_enclave and /dev/sgx_provision.
 
 # Add host SGX groups when present: "sgx" (systemd >= 248) and "sgx_prv"
 # (Intel libsgx-ae-pce); each is skipped if absent (0666 nodes, no group).
