@@ -77,6 +77,7 @@ servtd_attest:
 	$(MAKE) -C external/dcap_source/QuoteGeneration servtd_attest
 
 servtd_attest_preparation:
+	git submodule update --init -- sdk/
 	$(MAKE) -C sdk/ servtd_attest_preparation
 	git submodule update --init --recursive -- external/dcap_source
 	./external/dcap_source/QuoteVerification/prepare_sgxssl.sh nobuild
