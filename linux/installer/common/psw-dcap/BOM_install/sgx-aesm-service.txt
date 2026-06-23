@@ -3,7 +3,7 @@ DeliveryName	InstallName	FileCheckSum	FileFeature	FileOwner
 <deliverydir>/build/linux/libipc.so	<installdir>/aesm/libipc.so	0	main	STP
 <deliverydir>/build/linux/liboal.so	<installdir>/aesm/liboal.so	0	main	STP
 <deliverydir>/build/linux/libutils.so	<installdir>/aesm/libutils.so	0	main	STP
-<deliverydir>/build/linux/liburts_internal.so	<installdir>/aesm/liburts_internal.so	0	main	STP
+<deliverydir>/sdk/build/linux/liburts_internal.so	<installdir>/aesm/liburts_internal.so	0	main	STP
 <deliverydir>/build/linux/libCppMicroServices.so.4.0.0	<installdir>/aesm/libCppMicroServices.so.4.0.0	0	main	STP
 <deliverydir>/build/linux/aesmd.conf	<installdir>/aesm/aesmd.conf	0	main	STP
 <deliverydir>/build/linux/aesmd.service	<installdir>/aesm/aesmd.service	0	main	STP

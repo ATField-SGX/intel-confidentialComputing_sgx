@@ -18,7 +18,7 @@ COPY . .
 RUN make sdk_install_pkg_no_mitigation
 
 WORKDIR /opt/intel
-RUN sh -c 'echo yes | /linux-sgx/linux/installer/bin/sgx_linux_x64_sdk_*.bin'
+RUN sh -c 'echo yes | /linux-sgx/sdk/build_infrastructure/linux/installer/bin/sgx_linux_x64_sdk_*.bin'
 
 WORKDIR /linux-sgx
 ENV BUILD_PLATFORM="docker"

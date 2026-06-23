@@ -53,9 +53,11 @@ COMMON_DIR            := $(ROOT_DIR)/common
 LINUX_EXTERNAL_DIR    := $(ROOT_DIR)/external
 LINUX_PSW_DIR         := $(ROOT_DIR)/psw
 LINUX_SDK_DIR         := $(ROOT_DIR)/sdk
+SDK_COMMON_DIR        := $(LINUX_SDK_DIR)/common
 LINUX_UNITTESTS       := $(ROOT_DIR)/unittests
 DCAP_DIR              := $(LINUX_EXTERNAL_DIR)/dcap_source
-LIBUNWIND_DIR         := $(ROOT_DIR)/sdk/cpprt/linux/libunwind
+SE_VERSION_FILE       := $(COMMON_DIR)/inc/internal/se_version.h
+SGX_VERSION           := $(call get_full_version,STRFILEVER)
 
 CP    := cp -f
 LN    := ln -sf
@@ -317,11 +319,6 @@ else ifeq ($(MITIGATION-CVE-2020-0551), CF)
     IPP_SUBDIR = cve_2020_0551_cf
 endif
 
-
-SGX_IPP_DIR     := $(ROOT_DIR)/external/ippcp_internal
-SGX_IPP_INC     := $(SGX_IPP_DIR)/inc
-IPP_LIBS_DIR    := $(SGX_IPP_DIR)/lib/linux/intel64/$(IPP_SUBDIR)
-LD_IPP          := -lippcp
 
 ######## SGX SDK Settings ########
 SGX_SDK ?= /opt/intel/sgxsdk

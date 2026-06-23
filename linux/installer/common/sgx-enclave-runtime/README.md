@@ -1,3 +1,4 @@
+<!-- FIXME: this should have moved to SDK-side -->
 # sgx-enclave-runtime install targets
 
 This directory is a set of `make` install targets that stage the SGX

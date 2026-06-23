@@ -47,7 +47,7 @@ tarball_dir="${cur_dir}/${tarball}"
 make -C ${root_dir} preparation
 
 # Prepare ipp-crypto source
-pushd ${root_dir}/external/ippcp_internal/
+pushd ${root_dir}/sdk/external/ippcp_internal/
 
 cd ipp-crypto && git apply ../0001-Cryptography-Primitives-for-SGX.patch >/dev/null 2>&1 || git apply ../0001-Cryptography-Primitives-for-SGX.patch --check -R
 

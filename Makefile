@@ -6,7 +6,7 @@
 
 include buildenv.mk
 
-.PHONY: all tips preparation preparation_dcap dcap_prebuilts psw sdk_no_mitigation sdk clean rebuild tdx servtd_attest servtd_attest_preparation ipp sdk_install_pkg_no_mitigation sdk_install_pkg sdk_install_pkg_from_source psw_install_pkg
+.PHONY: all tips preparation preparation_dcap preparation_sdk dcap_prebuilts psw enclave_runtime sdk sdk_no_mitigation sdk_install_pkg_no_mitigation sdk_install_pkg sdk_install_pkg_from_source servtd_attest servtd_attest_preparation ipp clean rebuild tdx
 
 all: tips
 
@@ -21,43 +21,22 @@ tips:
 	@echo "        2) ensure that you have installed latest Intel(R) SGX SDK Installer which could be downloaded from: https://software.intel.com/en-us/sgx-sdk/download" and followed Installation Guide in the same page to finish installation.
 	@echo "        3) enter the command: \"make psw\""
 	@echo "     3. If you want to build other targets, please also follow README.md in same directory"
+	@echo "     ----------------------------------------------------------------"
+	@echo "     Prerequisite: run \"make preparation\" to prepare the source code before building other targets."
+	@echo "     ----------------------------------------------------------------"	
+	@echo "     Other targets:"
+	@echo "        1) make sdk : build the Intel(R) SGX SDK (proxied to the SDK submodule)"
+	@echo "        2) make tdx : build Intel(R) TDX components"
+	@echo "        3) make deb_local_repo : build Debian local repository"
+	@echo "        4) make rpm_local_repo : build RPM local repository"
+	@echo "     ----------------------------------------------------------------"
 
+# Forwarded to the SDK submodule's preparation (controls prebuilt-vs-source IPP).
 USE_PREBUILT_IPP ?= yes
 
-preparation: dcap_prebuilts preparation_dcap
-# As SDK build needs to clone and patch openmp, we cannot support the mode that download the source from github as zip.
-# Only enable the download from git
+preparation: dcap_prebuilts preparation_dcap preparation_sdk
 	git submodule update --init --recursive
-	cd external/openmp/openmp_code && git apply ../0001-Enable-OpenMP-in-SGX.patch >/dev/null 2>&1 ||  git apply ../0001-Enable-OpenMP-in-SGX.patch --check -R
-
-	# TODO refactor to remove duplication with the ./external/protobuf/Makefile.
-	# This Makefile should call ./external/protobuf/Makefile targets instead.
-	# If you are adding a new patch over this one, write your patch's name to .sgx_patched
-	@if ! grep -q "sgx_protobuf" external/protobuf/protobuf_code/.sgx_patched 2>/dev/null; then \
-		cd external/protobuf/protobuf_code && \
-		git apply ../sgx_protobuf.patch >/dev/null 2>&1 || git apply ../sgx_protobuf.patch --check -R && \
-		git submodule update --init --recursive; \
-	fi
-	# If you are adding a new patch over this one, write your patch's name to .sgx_patched
-	@if ! grep -q "sgx_abseil" external/protobuf/abseil-cpp/.sgx_patched 2>/dev/null; then \
-		cd external/protobuf/abseil-cpp && \
-		git apply ../sgx_abseil.patch >/dev/null 2>&1 || git apply ../sgx_abseil.patch --check -R; \
-	fi
-	./external/sgx-emm/create_symlink.sh
-	cd external/cbor && cp -r libcbor sgx_libcbor
-	cd external/cbor/libcbor && git apply ../raw_cbor.patch >/dev/null 2>&1 || git apply ../raw_cbor.patch --check -R
-	cd external/cbor/sgx_libcbor && git apply ../sgx_cbor.patch >/dev/null 2>&1 || git apply ../sgx_cbor.patch --check -R
-	cd external/ippcp_internal/ipp-crypto && git apply ../0001-Cryptography-Primitives-for-SGX.patch > /dev/null 2>&1 || git apply ../0001-Cryptography-Primitives-for-SGX.patch --check -R
-	cd external/ippcp_internal/ipp-crypto && mkdir -p build
-ifeq ($(USE_PREBUILT_IPP), yes)
 	./download_prebuilt.sh
-	@echo "Preparation finished. NOTE: prebuilt IPP Crypto libraries downloaded."
-	@echo "If you want to compile IPP Crypto libraries from source, run \"make preparation USE_PREBUILT_IPP=no\""
-else
-	./download_prebuilt.sh no_prebuilt_ipp
-	@echo "Preparation finished. NOTE: IPP Crypto libraries need to be built from source. Run 'make ipp' to build them or use one of the '*_from_source' targets."
-endif
-	cd external/libcxxrt/libcxxrt_code && git apply ../sgx_libcxxrt.patch >/dev/null 2>&1 || git apply ../sgx_libcxxrt.patch --check -R
 
 preparation_dcap:
 	git submodule update --init --recursive
@@ -66,22 +45,24 @@ preparation_dcap:
 	./external/dcap_source/QuoteVerification/prepare_sgxssl.sh nobuild
 	./external/dcap_source/QuoteGeneration/download_prebuilt.sh
 
+preparation_sdk:
+	git submodule update --init --recursive -- sdk/
+	$(MAKE) -C sdk/ preparation USE_PREBUILT_IPP=$(USE_PREBUILT_IPP)
+
 dcap_prebuilts:
 	./download_prebuilt_dcap.sh
 
-psw:
+psw: enclave_runtime
 	$(MAKE) -C psw/ USE_OPT_LIBS=$(USE_OPT_LIBS)
 
+enclave_runtime:
+	$(MAKE) -C sdk/ enclave_runtime SGX_SDK_VERSION=$(SGX_VERSION)
+
 sdk_no_mitigation:
-	$(MAKE) -C sdk/ USE_OPT_LIBS=$(USE_OPT_LIBS)
+	$(MAKE) -C sdk/ sdk_no_mitigation USE_OPT_LIBS=$(USE_OPT_LIBS) SGX_SDK_VERSION=$(SGX_VERSION)
 
 sdk:
-	$(MAKE) -C sdk/ clean MITIGATION-CVE-2020-0551=LOAD
-	$(MAKE) -C sdk/ MODE=$(MODE) MITIGATION-CVE-2020-0551=LOAD
-	$(MAKE) -C sdk/ clean MITIGATION-CVE-2020-0551=CF
-	$(MAKE) -C sdk/ MODE=$(MODE) MITIGATION-CVE-2020-0551=CF
-	$(MAKE) -C sdk/ clean
-	$(MAKE) -C sdk/ MODE=$(MODE)
+	$(MAKE) -C sdk/ sdk SGX_SDK_VERSION=$(SGX_VERSION)
 
 tdx:
 	$(MAKE) -C external/dcap_source/QuoteGeneration pce_logic
@@ -89,40 +70,29 @@ tdx:
 	$(MAKE) -C external/dcap_source/QuoteGeneration tdx_qgs
 	$(MAKE) -C external/dcap_source/QuoteGeneration tdx_attest
 
+# Retained (used in CI - 'servtdattest' variant). The SDK-side build is proxied
+# to the SDK submodule; the DCAP-side servtd_attest stays in this repo.
 servtd_attest:
-	@test -L common/inc/sgx_mm.h && test -d external/dcap_source/QuoteVerification/sgxssl \
-		&& test -f external/libcxxrt/libcxxrt_code/src/sgx_disable_print.h || \
-		{ echo "Error: Please run 'make servtd_attest_preparation' first"; exit 1; }
-	$(MAKE) -C sdk/ servtd_attest SERVTD_ATTEST=1
+	$(MAKE) -C sdk/ servtd_attest SGX_SDK_VERSION=$(SGX_VERSION)
 	$(MAKE) -C external/dcap_source/QuoteGeneration servtd_attest
 
 servtd_attest_preparation:
-# Only enable the download from git
-	git submodule update --init --recursive external/dcap_source external/sgx-emm/emm_src external/libcxxrt/libcxxrt_code
-	./external/sgx-emm/create_symlink.sh
+	$(MAKE) -C sdk/ servtd_attest_preparation
+	git submodule update --init --recursive -- external/dcap_source
 	./external/dcap_source/QuoteVerification/prepare_sgxssl.sh nobuild
-	cd external/libcxxrt/libcxxrt_code && (git apply ../sgx_libcxxrt.patch >/dev/null 2>&1 || git apply ../sgx_libcxxrt.patch --check -R)
 
+# IPP build proxied to the SDK submodule (IPP now lives SDK-side).
 ipp:
-	@command -v nasm >/dev/null 2>&1 || (echo "nasm not found, please install nasm" && exit 1)
-	$(MAKE) -C external/ippcp_internal/ clean
-	$(MAKE) -C external/ippcp_internal/ MITIGATION-CVE-2020-0551=LOAD
-	$(MAKE) -C external/ippcp_internal/ clean
-	$(MAKE) -C external/ippcp_internal/ MITIGATION-CVE-2020-0551=CF
-	$(MAKE) -C external/ippcp_internal/ clean
-	$(MAKE) -C external/ippcp_internal/
+	$(MAKE) -C sdk/ ipp SGX_SDK_VERSION=$(SGX_VERSION)
 
-# Generate SE SDK Install package
-sdk_install_pkg_no_mitigation: sdk_no_mitigation
-	./linux/installer/bin/build-installpkg.sh sdk
+sdk_install_pkg_no_mitigation:
+	$(MAKE) -C sdk/ sdk_install_pkg_no_mitigation SGX_SDK_VERSION=$(SGX_VERSION) PKG_OUT_ROOT_DIR="$(ROOT_DIR)/linux/installer"
 
-sdk_install_pkg: sdk
-	./linux/installer/bin/build-installpkg.sh sdk cve-2020-0551
+sdk_install_pkg:
+	$(MAKE) -C sdk/ sdk_install_pkg SGX_SDK_VERSION=$(SGX_VERSION) PKG_OUT_ROOT_DIR="$(ROOT_DIR)/linux/installer"
 
 sdk_install_pkg_from_source:
-	$(MAKE) ipp
-	$(MAKE) sdk
-	./linux/installer/bin/build-installpkg.sh sdk cve-2020-0551
+	$(MAKE) -C sdk/ sdk_install_pkg_from_source SGX_SDK_VERSION=$(SGX_VERSION) PKG_OUT_ROOT_DIR="$(ROOT_DIR)/linux/installer"
 
 psw_install_pkg: psw
 ifeq ("$(wildcard ./external/dcap_source/QuoteGeneration/psw/ae/data/prebuilt/libsgx_qe3.signed.so)", "")
@@ -204,18 +174,6 @@ deb_libsgx_quote_ex: psw
 deb_libsgx_uae_service: psw
 	./linux/installer/deb/libsgx-uae-service/build.sh
 
-.PHONY: deb_libsgx_enclave_common
-deb_libsgx_enclave_common: psw
-	./linux/installer/deb/libsgx-enclave-common/build.sh
-
-.PHONY: deb_libsgx_urts
-deb_libsgx_urts: psw
-	./linux/installer/deb/libsgx-urts/build.sh
-
-.PHONY: deb_libsgx_headers_pkg
-deb_libsgx_headers_pkg:
-	./linux/installer/deb/libsgx-headers/build.sh
-
 .PHONY: deb_libsgx_dcap_default_qpl
 deb_libsgx_dcap_default_qpl:
 	$(MAKE) -C external/dcap_source/QuoteGeneration deb_sgx_dcap_default_qpl_pkg
@@ -284,15 +242,27 @@ deb_tee_poe_gen_tool:
 	$(MAKE) -C external/dcap_source PoeTools_deb
 	$(CP) external/dcap_source/tools/PoeTools/build_infrastructure/installer/linux/deb/intel-tee-poe-gen-tool/intel-tee-poe-gen-tool*.deb ./linux/installer/deb/
 
+# Removed: libsgx-enclave-common, libsgx-urts and libsgx-headers are now produced
+# SDK-side (enclave_runtime + the SDK headers package). These error stubs redirect
+# anyone still invoking the old targets to the replacements.
+.PHONY: deb_libsgx_enclave_common deb_libsgx_urts
+deb_libsgx_enclave_common deb_libsgx_urts:
+	@echo "ERROR: '$@' has been removed; it is superseded by 'deb_enclave_runtime' (SDK-side enclave_runtime package)." && exit 1
+
+.PHONY: deb_libsgx_headers_pkg
+deb_libsgx_headers_pkg:
+	@echo "ERROR: 'deb_libsgx_headers_pkg' has been removed; the libsgx-headers package is now produced SDK-side. Use 'deb_sgx_sdk_pkg' (or 'make -C sdk/ deb_libsgx_headers_pkg')." && exit 1
+
+.PHONY: deb_enclave_runtime
+deb_enclave_runtime:
+	$(MAKE) -C sdk/ deb_enclave_runtime SGX_SDK_VERSION=$(SGX_VERSION) PKG_OUT_ROOT_DIR="$(ROOT_DIR)/linux/installer" FLATTEN_PKG_OUT_DIR=1
+
 .PHONY: deb_psw_pkg
-deb_psw_pkg: deb_libsgx_headers_pkg \
-             deb_libsgx_qe3_logic \
+deb_psw_pkg: deb_libsgx_qe3_logic \
              deb_libsgx_pce_logic \
              deb_sgx_aesm_service \
              deb_libsgx_quote_ex \
              deb_libsgx_uae_service \
-             deb_libsgx_enclave_common \
-             deb_libsgx_urts \
              deb_libsgx_ae_qe3 \
              deb_libsgx_ae_id_enclave \
              deb_libsgx_dcap_default_qpl \
@@ -310,10 +280,17 @@ deb_psw_pkg: deb_libsgx_headers_pkg \
              deb_tee_appraisal_tool \
              deb_libsgx_ae_qae \
              deb_pcs_client_tool \
-             deb_tee_poe_gen_tool
+             deb_tee_poe_gen_tool \
+             deb_enclave_runtime
 
+.PHONY: deb_sgx_sdk_pkg
+deb_sgx_sdk_pkg:
+	$(MAKE) -C sdk/ deb SGX_SDK_VERSION=$(SGX_VERSION) PKG_OUT_ROOT_DIR="$(ROOT_DIR)/linux/installer" FLATTEN_PKG_OUT_DIR=1
+
+# Note: deb_sgx_sdk_pkg is ~redundant in this repo's local repo (it mainly adds
+# the libsgx-headers package on top of what deb_psw_pkg already provides).
 .PHONY: deb_local_repo
-deb_local_repo: deb_psw_pkg
+deb_local_repo: deb_psw_pkg deb_sgx_sdk_pkg
 	./linux/installer/common/local_repo_builder/local_repo_builder.sh debian build
 
 .PHONY: rpm_libsgx_ae_qe3
@@ -376,22 +353,6 @@ rpm_libsgx_quote_ex: psw
 .PHONY: rpm_libsgx_uae_service
 rpm_libsgx_uae_service: psw
 	./linux/installer/rpm/libsgx-uae-service/build.sh
-
-.PHONY: rpm_libsgx_enclave_common
-rpm_libsgx_enclave_common: psw
-	./linux/installer/rpm/libsgx-enclave-common/build.sh
-
-.PHONY: rpm_libsgx_urts
-rpm_libsgx_urts: psw
-	./linux/installer/rpm/libsgx-urts/build.sh
-
-.PHONY: rpm_sdk_pkg
-rpm_sdk_pkg: sdk
-	./linux/installer/rpm/sdk/build.sh
-
-.PHONY: rpm_libsgx_headers_pkg
-rpm_libsgx_headers_pkg:
-	./linux/installer/rpm/libsgx-headers/build.sh
 
 .PHONY: rpm_libsgx_dcap_default_qpl
 rpm_libsgx_dcap_default_qpl:
@@ -460,15 +421,27 @@ rpm_tee_poe_gen_tool:
 	$(MAKE) -C external/dcap_source PoeTools_rpm
 	$(CP) external/dcap_source/tools/PoeTools/build_infrastructure/installer/linux/rpm/intel-tee-poe-gen-tool/intel-tee-poe-gen-tool*.rpm ./linux/installer/rpm/
 
+# Removed: libsgx-enclave-common, libsgx-urts and libsgx-headers are now produced
+# SDK-side (enclave_runtime + the SDK headers package). These error stubs redirect
+# anyone still invoking the old targets to the replacements.
+.PHONY: rpm_libsgx_enclave_common rpm_libsgx_urts
+rpm_libsgx_enclave_common rpm_libsgx_urts:
+	@echo "ERROR: '$@' has been removed; it is superseded by 'rpm_enclave_runtime' (SDK-side enclave_runtime package)." && exit 1
+
+.PHONY: rpm_libsgx_headers_pkg
+rpm_libsgx_headers_pkg:
+	@echo "ERROR: 'rpm_libsgx_headers_pkg' has been removed; the libsgx-headers package is now produced SDK-side. Use 'rpm_sgx_sdk_pkg' (or 'make -C sdk/ rpm_libsgx_headers_pkg')." && exit 1
+
+.PHONY: rpm_enclave_runtime
+rpm_enclave_runtime:
+	$(MAKE) -C sdk/ rpm_enclave_runtime SGX_SDK_VERSION=$(SGX_VERSION) PKG_OUT_ROOT_DIR="$(ROOT_DIR)/linux/installer" FLATTEN_PKG_OUT_DIR=1
+
 .PHONY: rpm_psw_pkg
-rpm_psw_pkg: rpm_libsgx_headers_pkg \
-             rpm_libsgx_pce_logic \
+rpm_psw_pkg: rpm_libsgx_pce_logic \
              rpm_libsgx_qe3_logic \
              rpm_sgx_aesm_service \
              rpm_libsgx_quote_ex \
              rpm_libsgx_uae_service \
-             rpm_libsgx_enclave_common \
-             rpm_libsgx_urts \
              rpm_libsgx_ae_qe3 \
              rpm_libsgx_ae_id_enclave \
              rpm_libsgx_dcap_default_qpl \
@@ -486,14 +459,21 @@ rpm_psw_pkg: rpm_libsgx_headers_pkg \
              rpm_tee_appraisal_tool \
              rpm_libsgx_ae_qae \
              rpm_pcs_client_tool \
-             rpm_tee_poe_gen_tool
+             rpm_tee_poe_gen_tool \
+             rpm_enclave_runtime
 
+.PHONY: rpm_sgx_sdk_pkg
+rpm_sgx_sdk_pkg:
+	$(MAKE) -C sdk/ rpm SGX_SDK_VERSION=$(SGX_VERSION) PKG_OUT_ROOT_DIR="$(ROOT_DIR)/linux/installer" FLATTEN_PKG_OUT_DIR=1
+
+# Note: rpm_sgx_sdk_pkg is ~redundant in this repo's local repo (it mainly adds
+# the libsgx-headers package on top of what rpm_psw_pkg already provides).
 .PHONY: rpm_local_repo
-rpm_local_repo: rpm_psw_pkg
+rpm_local_repo: rpm_psw_pkg rpm_sgx_sdk_pkg
 	./linux/installer/common/local_repo_builder/local_repo_builder.sh rpm build
 
 clean:
-	@$(MAKE) -C sdk/                                    clean
+	@$(MAKE) -C sdk/                                clean PKG_OUT_ROOT_DIR="$(ROOT_DIR)/linux/installer" FLATTEN_PKG_OUT_DIR=1
 	@$(MAKE) -C psw/                                    clean
 	@$(RM)   -r $(ROOT_DIR)/build
 	@$(RM)   -r linux/installer/bin/install-sgx-*.bin*.withLicense
@@ -501,19 +481,11 @@ clean:
 	./linux/installer/deb/sgx-aesm-service/clean.sh
 	./linux/installer/deb/libsgx-quote-ex/clean.sh
 	./linux/installer/deb/libsgx-uae-service/clean.sh
-	./linux/installer/deb/libsgx-enclave-common/clean.sh
-	./linux/installer/deb/libsgx-urts/clean.sh
-	./linux/installer/deb/libsgx-headers/clean.sh
 	./linux/installer/common/local_repo_builder/local_repo_builder.sh debian clean
 	./linux/installer/rpm/sgx-aesm-service/clean.sh
 	./linux/installer/rpm/libsgx-quote-ex/clean.sh
 	./linux/installer/rpm/libsgx-uae-service/clean.sh
-	./linux/installer/rpm/libsgx-enclave-common/clean.sh
-	./linux/installer/rpm/libsgx-urts/clean.sh
-	./linux/installer/rpm/libsgx-headers/clean.sh
-	./linux/installer/rpm/sdk/clean.sh
 	./linux/installer/common/local_repo_builder/local_repo_builder.sh rpm clean
-	$(MAKE) -C external/ippcp_internal/ clean
 ifeq ("$(shell test -f external/dcap_source/QuoteVerification/Makefile && echo Makefile exists)", "Makefile exists")
 	@$(MAKE) -C external/dcap_source/QuoteVerification  clean
 	@$(MAKE) -C external/dcap_source/QuoteGeneration    clean
@@ -558,10 +530,9 @@ distclean:
 	$(MAKE) clean
 	# Cleanup
 	$(RM) -r 'Intel redistributable binary.txt' Master_EULA_for_Intel_Sw_Development_Products.pdf redist.txt
-	$(RM) -rf external/ippcp_internal/inc/*.h external/ippcp_internal/lib/ external/ippcp_internal/license
 	$(RM) -rf external/toolset psw/ae/data/prebuilt/lib*.so psw/ae/data/prebuilt/README.md
 	$(RM) -rf external/dcap_source/QuoteGeneration/psw/ae/data/prebuilt/
 	$(RM) -rf external/dcap_source/QuoteGeneration/'Intel redistributable binary.txt'
 	$(RM) -rf external/dcap_source/QuoteVerification/sgxssl/
 	git submodule deinit  --all -f
-	$(RM) -rf dcap-trunk external/dcap_source external/openmp/openmp_code external/protobuf/protobuf_code external/protobuf/abseil-cpp external/cbor/sgx_libcbor external/cbor/libcbor
+	$(RM) -rf dcap-trunk external/dcap_source sdk

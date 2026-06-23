@@ -43,7 +43,6 @@ USR_LIB_PATH=$(addprefix $(DESTDIR)/usr/, $(or $(notdir $(shell gcc -print-multi
 SPLIT_VERSION=$(word $2,$(subst ., ,$1))
 
 ECL_VER=1.0.0
-LCH_VER=1.0.0
 QEX_VER=1.0.0
 URTS_VER:=2.0.0.0
 QE3L_VER:=1.0.0

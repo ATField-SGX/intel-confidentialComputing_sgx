@@ -18,7 +18,6 @@
 #define UAE_SERVICE_VERSION       "2.3.225.0"
 #define URTS_VERSION              "2.0.109.0"
 #define ENCLAVE_COMMON_VERSION    "1.2.109.0"
-#define LAUNCH_VERSION            "1.0.127.0"
 #define QUOTE_EX_VERSION          "1.1.127.0"
 
 #define PCE_VERSION               "1.25.100.1"

@@ -23,8 +23,8 @@ sdk_installer=""
 clean_repo()
 {
     pushd .
-    if [ -f $sgx_repo/external/ippcp_internal/Makefile ]; then
-        cd $sgx_repo/external/ippcp_internal/ && make clean
+    if [ -f $sgx_repo/sdk/external/ippcp_internal/Makefile ]; then
+        cd $sgx_repo/sdk/external/ippcp_internal/ && make clean
     fi
     if [ -f $sgx_repo/Makefile ]; then
         cd $sgx_repo/ && make clean
@@ -39,28 +39,36 @@ clean_repo()
 
 build_ipp()
 {
+    # NOTE: After the SDK extraction, the authoritative reproducible build of IPP
+    # lives in the SDK repo (sdk/ submodule). Building it here is OK for now, but
+    # the SDK repo is the source of truth -- keep this in sync with it.
+    echo "WARNING: reproducible IPP build now lives in the SDK repo (sdk/); this is a temporary in-tree copy." >&2
     local ipp_out="$build_out/ipp"
     pushd .
-    cd $sgx_repo/external/ippcp_internal/
+    cd $sgx_repo/sdk/external/ippcp_internal/
     make clean; make
     make clean; make MITIGATION-CVE-2020-0551=LOAD
     make clean; make MITIGATION-CVE-2020-0551=CF
     mkdir -p "$ipp_out"
-    cp -r $sgx_repo/external/ippcp_internal/lib/linux/intel64/* "$ipp_out"
+    cp -r $sgx_repo/sdk/external/ippcp_internal/lib/linux/intel64/* "$ipp_out"
     popd
 }
 
 build_sdk()
 {
+    # NOTE: After the SDK extraction, the authoritative reproducible build of the
+    # SDK lives in the SDK repo (sdk/ submodule). Building it here is OK for now,
+    # but the SDK repo is the source of truth -- keep this in sync with it.
+    echo "WARNING: reproducible SDK build now lives in the SDK repo (sdk/); this is a temporary in-tree copy." >&2
     local sdk_out="$build_out/sdk"
     pushd .
-    cd $sgx_repo; make sdk_install_pkg
-    local installer=$(find $sgx_repo/linux/installer/bin -name "sgx_linux_x64_sdk*.bin")
+    cd $sgx_repo; make -C sdk/ sdk_install_pkg
+    local installer=$(find $sgx_repo/sdk/build_infrastructure/linux/installer/bin -name "sgx_linux_x64_sdk*.bin")
     if [ ! -d "$sdk_out" ]; then
         mkdir -p $sdk_out
     fi
     cp $installer $sdk_out
-    cp -r $sgx_repo/build/* $sdk_out
+    cp -r $sgx_repo/sdk/build/* $sdk_out
     popd
     sdk_installer="$installer"
 }

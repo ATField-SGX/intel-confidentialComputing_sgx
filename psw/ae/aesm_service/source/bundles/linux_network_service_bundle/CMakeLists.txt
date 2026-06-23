@@ -38,6 +38,9 @@ target_include_directories(${bundle} PRIVATE
 	${PROJECT_SOURCE_DIR}/common/oal
 	${SGX_HEADER_DIR}
 	${PROJECT_SOURCE_DIR}/../../../../common/inc/internal
+	# [SDK-X-REPO-INCLUDE] Cross-repo dep on SDK submodule internal headers (encapsulation smell, to be removed).
+	# Actually used by this target: se_types.h, se_wrapper.h, se_thread.h, util.h.
+	${PROJECT_SOURCE_DIR}/../../../../sdk/common/inc/internal
 	${PROJECT_SOURCE_DIR}/../../inc
 	${PROJECT_SOURCE_DIR}/../../inc/internal
 )

@@ -45,7 +45,7 @@ RDRAND_MAKEFILE := $(RDRAND_LIBDIR)/Makefile
 all: $(APPNAME) $(APPNAME_DEBUG) | $(BUILD_DIR)
 	$(CP) -r source/build/bin/* $|
 
-$(APPNAME): $(CPPMICROSERVICES) source/build/CMakeCache.txt urts RDRAND
+$(APPNAME): $(CPPMICROSERVICES) source/build/CMakeCache.txt RDRAND
 	$(MAKE) -C source/build
 	$(CP) $(CPPMICROSERVICES) source/build/bin/
 
@@ -80,10 +80,6 @@ ifeq ($(ARCH), x86)
 else
 	@cd $(RDRAND_LIBDIR);./configure CFLAGS=-fPIC
 endif
-
-.PHONY: urts
-urts:
-	$(MAKE) -C $(LINUX_PSW_DIR)/urts/linux
 
 $(BUILD_DIR):
 	@$(MKDIR) $@

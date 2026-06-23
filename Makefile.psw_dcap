@@ -38,12 +38,16 @@ endef
 SGX_SDK := /tmp/intel/sgxsdk
 export SGX_SDK
 
-.PHONY: build psw dcap install clean sdk install_sdk ippcp
+.PHONY: build psw dcap install clean sdk install_sdk ippcp enclave_runtime
 
 build: psw dcap
 
-psw: install_sdk
+psw: install_sdk enclave_runtime
 	@$(MAKE) -C psw/ USE_OPT_LIBS=$(USE_OPT_LIBS)
+
+# uRTS / enclave_common now live in the SDK submodule's enclave_runtime.
+enclave_runtime:
+	@$(MAKE) -C sdk/ enclave_runtime SGX_SDK_VERSION=$(SGX_VERSION)
 
 dcap: install_sdk
 	# Workaround until fixed in DCAP: prebuild race-prone targets, then skip
@@ -64,19 +68,24 @@ clean:
 	@$(MAKE) -C psw/                  clean
 	@$(MAKE) -C external/dcap_source/ clean
 	@$(MAKE) -C sdk/                  clean
-	@$(MAKE) -C external/ippcp_internal/ clean
 ifneq ($(call DIR_EXISTS,$(SGX_SDK)),)
 	$(SGX_SDK)/uninstall.sh
 endif
 
+# IPP now lives inside the SDK submodule; proxy the build to it.
 ippcp:
-	$(MAKE) -C external/ippcp_internal/
+	$(MAKE) -C sdk/ ipp SGX_SDK_VERSION=$(SGX_VERSION)
 
+# The SDK build is proxied to the SDK submodule (its default target only
+# prints tips, so the 'sdk' target must be requested explicitly).
 sdk: ippcp
-	$(MAKE) -C sdk/
+	$(MAKE) -C sdk/ sdk SGX_SDK_VERSION=$(SGX_VERSION)
 
+# Build the SDK installer via the SDK submodule (the top-level build-installpkg.sh
+# no longer supports 'sdk'). The .bin lands in linux/installer/bin/ via
+# PKG_OUT_ROOT_DIR; install it under SGX_SDK if not present yet.
 install_sdk: sdk
-	./linux/installer/bin/build-installpkg.sh sdk
+	$(MAKE) -C sdk/ sdk_install_pkg SGX_SDK_VERSION=$(SGX_VERSION) PKG_OUT_ROOT_DIR="$(ROOT_DIR)/linux/installer"
 ifeq ($(call DIR_EXISTS,$(SGX_SDK)),)
 	./linux/installer/bin/sgx_linux_x64_sdk_*.bin --prefix=$(dir $(SGX_SDK))
 endif

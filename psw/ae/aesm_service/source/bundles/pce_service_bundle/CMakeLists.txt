@@ -39,6 +39,9 @@ CreateBundle(${bundle} ${_srcs})
 target_include_directories(${bundle} PRIVATE
 	${PROJECT_SOURCE_DIR}/common
 	${PROJECT_SOURCE_DIR}/../../../../common/inc/internal
+	# [SDK-X-REPO-INCLUDE] Cross-repo dep on SDK submodule internal headers (encapsulation smell, to be removed).
+	# Analysis (PR #329) found NO internal header used by this bundle -> unused, candidate for removal.
+	${PROJECT_SOURCE_DIR}/../../../../sdk/common/inc/internal
 	${SGX_HEADER_DIR}
 	${PROJECT_SOURCE_DIR}/../../inc
 	${PROJECT_SOURCE_DIR}/../../inc/internal

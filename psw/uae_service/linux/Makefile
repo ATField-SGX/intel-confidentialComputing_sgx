@@ -44,9 +44,17 @@ UAE_INC_DIR    := $(UAE_WRAPPER_DIR)/inc
 AE_COMMON_DIR    := $(LINUX_PSW_DIR)/ae/common
 
 INCLUDE += -I.
-INCLUDE += -I$(COMMON_DIR)              \
-           -I$(COMMON_DIR)/inc          \
-           -I$(COMMON_DIR)/inc/internal \
+INCLUDE += -I$(COMMON_DIR)/inc             \
+           -I$(COMMON_DIR)/inc/internal    \
+           -I$(SDK_COMMON_DIR)             \
+           -I$(SDK_COMMON_DIR)/inc         \
+           -I$(SDK_COMMON_DIR)/inc/internal
+# [SDK-X-REPO-INCLUDE] Cross-repo dep on SDK submodule headers (encapsulation smell, to be removed).
+# Breakdown of the 3 SDK dirs above (analysis PR #329):
+#   -I$(SDK_COMMON_DIR)              -> UNUSED (no header resolved here); candidate for removal.
+#   -I$(SDK_COMMON_DIR)/inc          -> public SDK API headers: sgx_error.h, sgx_quote.h, sgx_ql_quote.h,
+#                                       sgx_report.h, sgx_uae_quote_ex.h, sgx_urts.h.
+#   -I$(SDK_COMMON_DIR)/inc/internal -> SDK-internal headers: arch.h, se_cdefs.h, se_trace.h.
 
 INCLUDE += -I$(LINUX_PSW_DIR)/ae/common         \
            -I$(LINUX_PSW_DIR)/ae/inc            \
@@ -64,7 +72,9 @@ CXXFLAGS += -fPIC -Werror -Wno-unused-parameter -g -DPROTOBUF_INLINE_NOT_IN_HEAD
 EXTERNAL_LIB += -lprotobuf
 
 vpath %.cpp .. $(COMMON_DIR)/src  $(IPC_COMMON_SRC_DIR) $(IPC_COMMON_PROTO_DIR) $(UAE_SRC_DIR) $(AE_COMMON_DIR)
-vpath %.c   $(COMMON_DIR)/src
+# [SDK-X-REPO-INCLUDE] Cross-repo dep: the only %.c sourced from the SDK submodule ($(SDK_COMMON_DIR)/src)
+# is se_trace.c (see C_SRC below); encapsulation smell, to be removed.
+vpath %.c   $(COMMON_DIR)/src $(SDK_COMMON_DIR)/src
 
 C_SRC   := se_trace.c
 

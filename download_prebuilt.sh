@@ -17,6 +17,11 @@ server_ae_url=$server_url_path/$ae_file_name
 server_binutils_url=$server_url_path/$binutils_file_name
 server_checksum_url=$server_url_path/$checksum_file
 
+# NOTE (consider): post SDK-extraction the optlibs payload relevant to PSW is IPP
+# (external/ippcp_internal/*), which is now provided SDK-side and excluded below.
+# No PSW/common target links IPP; the only remaining references are two dead
+# include dirs in the ecdsa/quote_ex AESM bundles. Once those are removed, this
+# optlibs download could likely be dropped here (keeping prebuilt_ae + binutils).
 rm -f $out_dir/$optlib_name
 wget $server_optlib_url -P $out_dir
 if [ $? -ne 0 ]; then
@@ -53,11 +58,9 @@ if [ $? -ne 0 ]; then
     echo "Checksum verification failure"
     exit -1
 fi
-if [ "$1" = "no_prebuilt_ipp" ]; then
-    tar -zxf $optlib_name --exclude='external/ippcp_internal/*'
-else
-    tar -zxf $optlib_name
-fi
+
+# IPP is now provided SDK-side; never extract it from the PSW prebuilt optlibs.
+tar -zxf $optlib_name --exclude='external/ippcp_internal/*'
 tar -zxf $ae_file_name
 tar -zxf $binutils_file_name
 rm -f $optlib_name

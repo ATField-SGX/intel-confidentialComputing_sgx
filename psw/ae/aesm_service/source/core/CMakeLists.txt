@@ -48,6 +48,9 @@ target_include_directories(aesm_service PRIVATE
   ${PROJECT_SOURCE_DIR}/../../inc/internal
   ${SGX_HEADER_DIR}
   ${PROJECT_SOURCE_DIR}/../../../../common/inc/internal
+  # [SDK-X-REPO-INCLUDE] Cross-repo dep on SDK submodule internal headers (encapsulation smell, to be removed).
+  # Actually used by this target: arch.h, util.h.
+  ${PROJECT_SOURCE_DIR}/../../../../sdk/common/inc/internal
   ${PROJECT_SOURCE_DIR}/../../../../external/dcap_source/QuoteGeneration/quote_wrapper/common/inc
   ${PROJECT_SOURCE_DIR}/../../../../external/dcap_source/QuoteGeneration/quote_wrapper/quote/inc
   ${PROJECT_SOURCE_DIR}/interfaces

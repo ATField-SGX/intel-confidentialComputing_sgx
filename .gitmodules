@@ -2,35 +2,7 @@
 	path = external/dcap_source
 	url = ../confidential-computing.tee.dcap.git
 	branch = .
-[submodule "openmp"]
-	path = external/openmp/openmp_code
-	url = https://github.com/llvm-mirror/openmp.git
-	branch = svn-tags/RELEASE_801
-[submodule "dnnl"]
-	path = SampleCode/external/dnnl/dnnl
-	url = https://github.com/oneapi-src/oneDNN.git
-	branch = rls-v1.1
-	update = none  # Do not checkout this submodule automatically		
-[submodule "ipp-crypto"]
-	path = external/ippcp_internal/ipp-crypto
-	url = https://github.com/intel/cryptography-primitives.git
-	branch = cryptography-primitives_2_2_0
-[submodule "external/protobuf/protobuf_code"]
-	path = external/protobuf/protobuf_code
-	url = https://github.com/protocolbuffers/protobuf.git
-	branch = 33.x
-[submodule "external/sgx-emm/emm_src"]
-	path = external/sgx-emm/emm_src
-	url = https://github.com/intel/sgx-emm.git
-[submodule "external/cbor/libcbor"]
-	path = external/cbor/libcbor
-	url = https://github.com/PJK/libcbor.git
-[submodule "external/libcxxrt/libcxxrt_code"]
-	path = external/libcxxrt/libcxxrt_code
-	url = https://github.com/libcxxrt/libcxxrt.git
-[submodule "external/protobuf/abseil-cpp"]
-	path = external/protobuf/abseil-cpp
-	url = https://github.com/abseil/abseil-cpp.git
-	# Version choice is linked to protobuf requirements (i.e. it's 'dependencies.cmake').
-	branch = lts_2025_05_12
-
+[submodule "sdk"]
+	path = sdk
+	url = ../confidential-computing.sgx.sdk
+	branch = .

@@ -37,9 +37,10 @@ else()
 	find_package(Threads REQUIRED)
 endif()
 add_library(oal SHARED ${OAL_LIB_SRCS}
-	"../../../../../common/src/se_thread.c"
-	"../../../../../common/src/se_trace.c"
-	"../../../../../common/src/se_time.c")
+	# [SDK-X-REPO-INCLUDE] Cross-repo dep: these sources are compiled straight from the SDK submodule (encapsulation smell, to be removed).
+	"../../../../../sdk/common/src/se_thread.c"
+	"../../../../../sdk/common/src/se_trace.c"
+	"../../../../../sdk/common/src/se_time.c")
 
 target_include_directories(oal PRIVATE
 	${PROJECT_SOURCE_DIR}/common
@@ -49,6 +50,9 @@ target_include_directories(oal PRIVATE
 	${SGX_HEADER_DIR}
 	${PROJECT_SOURCE_DIR}/../../../../common/inc/internal
 	${PROJECT_SOURCE_DIR}/../../data/constants/linux
+	# [SDK-X-REPO-INCLUDE] Cross-repo dep on SDK submodule internal headers (encapsulation smell, to be removed).
+	# Actually used by this target: se_thread.h, se_string.h, se_stdio.h, util.h (see *.cpp under oal/linux).
+	${PROJECT_SOURCE_DIR}/../../../../sdk/common/inc/internal
 )
 
 target_compile_definitions(oal PRIVATE
