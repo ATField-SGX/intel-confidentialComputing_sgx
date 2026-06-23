@@ -46,7 +46,7 @@
     // AEX Notify is only supported on Linux
     #include "sgx_aex_notify_region.h"
 #else
-    #define SGX_REPEAT_AEX_REGION(BLOCK) BLOCK
+    #define SGX_REPEAT_AEX_REGION(BLOCK) do { BLOCK } while (0)
 #endif
 
 ae_error_t get_ppid(ppid_t* ppid);
