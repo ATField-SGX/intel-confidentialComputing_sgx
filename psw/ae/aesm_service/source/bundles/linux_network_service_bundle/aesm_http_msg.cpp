@@ -52,6 +52,7 @@
 
 #define REQUEST_ID ("Request-ID")
 
+#define HTTP_DOWNLOAD_MAX_SIZE (100 * 1024 * 1024) // HTTP response must not exceed 100 MB
 
 typedef struct _network_malloc_info_t{
     char *base;
@@ -176,40 +177,54 @@ ae_error_t prepare_curl() {
 
 static size_t write_callback(void *ptr, size_t size, size_t nmemb, void *stream)
 {
-    network_malloc_info_t* s=reinterpret_cast<network_malloc_info_t *>(stream);
-    uint32_t start=0;
-    if(s->base==NULL){
-        if(UINT32_MAX/size<nmemb){
-              return 0;//buffer overflow
-        }
-        s->base = reinterpret_cast<char *>(malloc(size*nmemb));
-        s->size = static_cast<uint32_t>(size*nmemb);
-        if(s->base==NULL){
-            AESM_DBG_ERROR("malloc error in write callback fun");
+    network_malloc_info_t *s = reinterpret_cast<network_malloc_info_t *>(stream);
+    uint32_t start = 0;
+    uint32_t data_size = 0;
+
+    if (s == NULL || size == 0 || nmemb == 0) {
+        return 0;
+    }
+
+    if (__builtin_mul_overflow(size, nmemb, &data_size)) {
+        return 0;
+    }
+
+    if (s->base == NULL) {
+        if (data_size > HTTP_DOWNLOAD_MAX_SIZE) {
             return 0;
         }
-    }else{
-        uint32_t newsize = s->size+static_cast<uint32_t>(size*nmemb);
-        if((UINT32_MAX-s->size)/size<nmemb){
-            free(s->base);
-            s->base = NULL;
-            return 0;//buffer overflow
-        }
-        char *p=reinterpret_cast<char *>(malloc(newsize));
-        if(p == NULL){
-            free(s->base);
-            s->base = NULL;
-            AESM_DBG_ERROR("malloc error in write callback fun");
+
+        s->base = reinterpret_cast<char*>(malloc(data_size));
+
+        if(s->base == NULL) {
+            AESM_DBG_ERROR("Memory allocation failed in write_callback");
             return 0;
         }
-        memcpy_s(p, newsize, s->base, s->size);
-        free(s->base);
+
+        s->size = data_size;
+    } else {
+        if (data_size > HTTP_DOWNLOAD_MAX_SIZE || s->size > HTTP_DOWNLOAD_MAX_SIZE - data_size) {
+            return 0;
+        }
+
+        uint32_t new_size = s->size + data_size;
+        char *p = reinterpret_cast<char*>(realloc(s->base, new_size));
+
+        if (p == NULL) {
+            AESM_DBG_ERROR("Memory allocation failed in write_callback");
+            return 0;
+        }
+
         start = s->size;
         s->base = p;
-        s->size = newsize;
+        s->size = new_size;
     }
-    memcpy_s(s->base +start, s->size-start, ptr, size*nmemb);
-    return nmemb;
+
+    if (memcpy_s(s->base + start, s->size - start, ptr, data_size) != 0) {
+        return 0;
+    }
+
+    return data_size;
 }
 
 static ae_error_t http_network_init(CURL **curl, const char *url, bool is_ocsp)
