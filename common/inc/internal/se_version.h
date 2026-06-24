@@ -20,6 +20,6 @@
 #define ENCLAVE_COMMON_VERSION    "1.2.109.0"
 #define QUOTE_EX_VERSION          "1.1.127.0"
 
-#define PCE_VERSION               "1.25.100.1"
+#define PCE_VERSION               "1.27.100.1"
 
 #endif
