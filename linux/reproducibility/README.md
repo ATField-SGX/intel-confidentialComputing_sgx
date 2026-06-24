@@ -13,7 +13,7 @@ In order to reproduce the enclave build, there are three requirements:1. stable 
     * ae:  specify this type if you want to verify the reproducibility for the prebuilt AEs. The script will prepare materials for AE reproducible build in the hose machine and trigger the corresponding build in the launched container.    
     * all: specify this type if you want to verify all of the above components. The script will prepare materials for all the targets and trigger  the build in the launched container.   
  See `$ ./build_and_launch_docker.sh -h` for details  
- - The script [start_build.sh.tmp](./start_build.sh.tmp) is aimed to be run in the NIX environment in the launched container. It helps to automate the reproducible build in the container.
+ - The script [start_build.sh.tmpl](./start_build.sh.tmpl) is aimed to be run in the NIX environment in the launched container. It helps to automate the reproducible build in the container.
 
 
 ## Quick Start
