@@ -50,8 +50,8 @@ mount_dir="/linux-sgx"
 sdk_installer=""
 sgx_src=""
 
-default_sdk_installer=sgx_linux_x64_sdk_reproducible_2.28.100.0.bin
-default_sdk_installer_url=https://download.01.org/intel-sgx/sgx-linux/2.28/distro/nix_reproducibility/$default_sdk_installer
+default_sdk_installer=sgx_linux_x64_sdk_reproducible_2.30.100.1.bin
+default_sdk_installer_url=https://download.01.org/intel-sgx/sgx-linux/2.30/distro/nix_reproducibility/$default_sdk_installer
 
 
 usage()
@@ -152,7 +152,7 @@ prepare_sgx_src()
     if [ "$sgx_src" != "" ]; then
         mkdir -p "$sgx_repo" && cp -a "$sgx_src/." "$sgx_repo"
     else
-        git clone -b sgx_2.28_reproducible https://github.com/intel/confidential-computing.sgx.git $sgx_repo
+        git clone -b sgx_2.30_reproducible https://github.com/intel/confidential-computing.sgx.git $sgx_repo
     fi
 
     cd "$sgx_repo" && make preparation
