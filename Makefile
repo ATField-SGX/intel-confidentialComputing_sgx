@@ -95,16 +95,19 @@ sdk_install_pkg:
 sdk_install_pkg_from_source:
 	$(MAKE) -C sdk/ sdk_install_pkg_from_source SGX_SDK_VERSION=$(SGX_VERSION) PKG_OUT_ROOT_DIR="$(ROOT_DIR)/linux/installer"
 
-psw_install_pkg: psw
-ifeq ("$(wildcard ./external/dcap_source/QuoteGeneration/psw/ae/data/prebuilt/libsgx_qe3.signed.so)", "")
-	./external/dcap_source/QuoteGeneration/download_prebuilt.sh
-endif
-ifeq ("$(wildcard ./external/dcap_source/QuoteGeneration/psw/ae/data/prebuilt/libsgx_id_enclave.signed.so)", "")
-	./external/dcap_source/QuoteGeneration/download_prebuilt.sh
-endif
-	$(CP) external/dcap_source/QuoteGeneration/psw/ae/data/prebuilt/libsgx_qe3.signed.so $(BUILD_DIR)
-	$(CP) external/dcap_source/QuoteGeneration/psw/ae/data/prebuilt/libsgx_id_enclave.signed.so $(BUILD_DIR)
-	./linux/installer/bin/build-installpkg.sh psw
+# TOMBSTONE: the legacy PSW binary (.bin) installer has been removed.
+# The Linux PSW has been delivered exclusively via DEB/RPM packages since 2019
+# (the last .bin installer published was 2.7.1 for RHEL/Fedora/SUSE and 2.2 for
+# Ubuntu). The .bin shipped the AESM out-of-process quoting service; its direct
+# replacement is the full PSW AESM runtime aggregate, deb_psw_aesm_pkg /
+# rpm_psw_aesm_pkg. (deb_psw_pkg / rpm_psw_pkg also exist but aggregate far more
+# -- PCCS, TDX, DCAP verification and registration tools.)
+.PHONY: psw_install_pkg
+psw_install_pkg:
+	@echo "ERROR: 'psw_install_pkg' (the legacy PSW .bin installer) has been removed." >&2
+	@echo "       The Linux PSW is delivered via DEB/RPM packages; build the AESM runtime" >&2
+	@echo "       aggregate instead (e.g. 'make deb_psw_aesm_pkg' or 'make rpm_psw_aesm_pkg')." >&2
+	@exit 1
 
 .PHONY: deb_libsgx_ae_qe3
 deb_libsgx_ae_qe3:
@@ -166,6 +169,14 @@ deb_libsgx_pce_logic: psw
 .PHONY: deb_sgx_aesm_service
 deb_sgx_aesm_service: psw deb_libsgx_pce_logic
 	./linux/installer/deb/sgx-aesm-service/build.sh
+
+# libsgx-ae-pce (the PCE architectural enclave) has no standalone build -- it is one
+# of five binary packages emitted from the shared sgx-aesm-service source package.
+# This target runs that shared build but names the single artifact DCAP quoting
+# actually needs, so DCAP-only aggregates don't appear to depend on the full AESM
+# service. (The other four packages are still produced as a side effect.)
+.PHONY: deb_libsgx_ae_pce
+deb_libsgx_ae_pce: deb_sgx_aesm_service
 
 .PHONY: deb_libsgx_quote_ex
 deb_libsgx_quote_ex: psw
@@ -258,31 +269,71 @@ deb_libsgx_headers_pkg:
 deb_enclave_runtime:
 	$(MAKE) -C sdk/ deb_enclave_runtime SGX_SDK_VERSION=$(SGX_VERSION) PKG_OUT_ROOT_DIR="$(ROOT_DIR)/linux/installer" FLATTEN_PKG_OUT_DIR=1
 
-.PHONY: deb_psw_pkg
-deb_psw_pkg: deb_libsgx_qe3_logic \
-             deb_libsgx_pce_logic \
-             deb_sgx_aesm_service \
+# Full PSW AESM runtime: the AESM out-of-process quoting service + its complete
+# dependency closure, plus the default Quote Provider Library (QPL)
+.PHONY: deb_psw_aesm_pkg
+deb_psw_aesm_pkg: deb_sgx_aesm_service \
              deb_libsgx_quote_ex \
              deb_libsgx_uae_service \
+             deb_enclave_runtime \
+             deb_libsgx_pce_logic \
+             deb_libsgx_qe3_logic \
              deb_libsgx_ae_qe3 \
              deb_libsgx_ae_id_enclave \
+             deb_libsgx_dcap_default_qpl
+
+# DCAP in-process SGX quoting + verification: the full hard-Requires closure of three
+# roots -- libsgx-dcap-ql, libsgx-dcap-default-qpl, and libsgx-dcap-quote-verify --
+# plus the QVE/QAE verification enclaves (libsgx-ae-qve, libsgx-ae-qae)
+.PHONY: _deb_dcap_sgx_quoting_support_pkg
+_deb_dcap_sgx_quoting_support_pkg: deb_libsgx_dcap_ql \
+             deb_libsgx_qe3_logic \
+             deb_libsgx_pce_logic \
+             deb_libsgx_ae_qe3 \
+             deb_libsgx_ae_id_enclave \
+             deb_libsgx_ae_pce \
              deb_libsgx_dcap_default_qpl \
+             deb_sgx_dcap_quote_verify \
+             deb_libsgx_ae_qve \
+             deb_libsgx_ae_qae \
+             deb_enclave_runtime
+
+# DCAP TDX quoting (host-side, SGX-based): everything needed to run the TD Quote
+# Generation Service. Root is tdx-qgs; its hard-Requires closure pulls libsgx-tdx-logic
+# and the SGX quoting machinery that signs TD quotes via the TDQE (an SGX enclave):
+# libsgx-pce-logic, libsgx-ae-tdqe, libsgx-ae-id-enclave, libsgx-ae-pce, QPL, urts.
+# Also bundles the quote verification stack (libsgx-dcap-quote-verify + the QVE/QAE
+# enclaves) and libtdx-attest -- the in-TD guest library that requests quotes from QGS
+.PHONY: _deb_dcap_tdx__sgx_based_quoting_support_pkg
+_deb_dcap_tdx__sgx_based_quoting_support_pkg: deb_tdx_qgs \
+             deb_libsgx_tdx_logic \
+             deb_libsgx_pce_logic \
+             deb_libsgx_ae_tdqe \
+             deb_libsgx_ae_id_enclave \
+             deb_libsgx_ae_pce \
+             deb_libsgx_dcap_default_qpl \
+             deb_sgx_dcap_quote_verify \
+             deb_libsgx_ae_qve \
+             deb_libsgx_ae_qae \
+             deb_tdx_attest \
+             deb_enclave_runtime
+
+# Full local DCAP/PSW package set. Composed from the three quoting aggregates above
+# (PSW AESM runtime + DCAP SGX quoting/verification + DCAP TDX/SGX-based quoting);
+# Make builds each shared prerequisite only once. The remaining prerequisites are the
+# auxiliary packages: PCCS + its admin tool, PCK ID retrieval, platform
+# registration (RA), the appraisal tool, the PCS client tool, and the POE tools.
+.PHONY: deb_psw_pkg
+deb_psw_pkg: deb_psw_aesm_pkg \
+             _deb_dcap_sgx_quoting_support_pkg \
+             _deb_dcap_tdx__sgx_based_quoting_support_pkg \
              deb_libsgx_dcap_pccs \
              deb_pccs_admin_tool_pkg \
-             deb_libsgx_dcap_ql \
-             deb_libsgx_ae_qve \
-             deb_sgx_dcap_quote_verify \
              deb_sgx_pck_id_retrieval_tool_pkg \
              deb_sgx_ra_service_pkg \
-             deb_libsgx_ae_tdqe \
-             deb_libsgx_tdx_logic \
-             deb_tdx_qgs \
-             deb_tdx_attest \
              deb_tee_appraisal_tool \
-             deb_libsgx_ae_qae \
              deb_pcs_client_tool \
-             deb_tee_poe_gen_tool \
-             deb_enclave_runtime
+             deb_tee_poe_gen_tool
 
 .PHONY: deb_sgx_sdk_pkg
 deb_sgx_sdk_pkg:
@@ -346,6 +397,11 @@ rpm_libsgx_qe3_logic: psw
 .PHONY: rpm_sgx_aesm_service
 rpm_sgx_aesm_service: psw
 	./linux/installer/rpm/sgx-aesm-service/build.sh
+
+# See deb_libsgx_ae_pce: libsgx-ae-pce ships only as part of the shared
+# sgx-aesm-service build; this target names just the PCE artifact we need.
+.PHONY: rpm_libsgx_ae_pce
+rpm_libsgx_ae_pce: rpm_sgx_aesm_service
 
 .PHONY: rpm_libsgx_quote_ex
 rpm_libsgx_quote_ex: psw
@@ -437,31 +493,67 @@ rpm_libsgx_headers_pkg:
 rpm_enclave_runtime:
 	$(MAKE) -C sdk/ rpm_enclave_runtime SGX_SDK_VERSION=$(SGX_VERSION) PKG_OUT_ROOT_DIR="$(ROOT_DIR)/linux/installer" FLATTEN_PKG_OUT_DIR=1
 
-.PHONY: rpm_psw_pkg
-rpm_psw_pkg: rpm_libsgx_pce_logic \
-             rpm_libsgx_qe3_logic \
-             rpm_sgx_aesm_service \
+# Full PSW AESM runtime (RPM): AESM out-of-process quoting service + its complete
+# closure plus the default Quote Provider Library (QPL).
+.PHONY: rpm_psw_aesm_pkg
+rpm_psw_aesm_pkg: rpm_sgx_aesm_service \
              rpm_libsgx_quote_ex \
              rpm_libsgx_uae_service \
+             rpm_enclave_runtime \
+             rpm_libsgx_pce_logic \
+             rpm_libsgx_qe3_logic \
              rpm_libsgx_ae_qe3 \
              rpm_libsgx_ae_id_enclave \
+             rpm_libsgx_dcap_default_qpl
+
+# DCAP in-process SGX quoting + verification (RPM): the full hard-Requires closure of
+# three roots -- libsgx-dcap-ql, libsgx-dcap-default-qpl, and libsgx-dcap-quote-verify
+# -- plus the QVE/QAE enclaves (libsgx-ae-qve, libsgx-ae-qae).
+.PHONY: _rpm_dcap_sgx_quoting_support_pkg
+_rpm_dcap_sgx_quoting_support_pkg: rpm_libsgx_dcap_ql \
+             rpm_libsgx_qe3_logic \
+             rpm_libsgx_pce_logic \
+             rpm_libsgx_ae_qe3 \
+             rpm_libsgx_ae_id_enclave \
+             rpm_libsgx_ae_pce \
              rpm_libsgx_dcap_default_qpl \
+             rpm_sgx_dcap_quote_verify \
+             rpm_libsgx_ae_qve \
+             rpm_libsgx_ae_qae \
+             rpm_enclave_runtime
+
+# DCAP TDX quoting (host-side, SGX-based, RPM): root is tdx-qgs; pulls libsgx-tdx-logic
+# and the SGX quoting machinery (libsgx-pce-logic, libsgx-ae-tdqe, libsgx-ae-id-enclave,
+# libsgx-ae-pce, QPL, urts), the quote verification stack (libsgx-dcap-quote-verify +
+# QVE/QAE enclaves), and libtdx-attest (guest-side)
+.PHONY: _rpm_dcap_tdx__sgx_based_quoting_support_pkg
+_rpm_dcap_tdx__sgx_based_quoting_support_pkg: rpm_tdx_qgs \
+             rpm_libsgx_tdx_logic \
+             rpm_libsgx_pce_logic \
+             rpm_libsgx_ae_tdqe \
+             rpm_libsgx_ae_id_enclave \
+             rpm_libsgx_ae_pce \
+             rpm_libsgx_dcap_default_qpl \
+             rpm_sgx_dcap_quote_verify \
+             rpm_libsgx_ae_qve \
+             rpm_libsgx_ae_qae \
+             rpm_tdx_attest \
+             rpm_enclave_runtime
+
+# Full local DCAP/PSW package set (RPM). See deb_psw_pkg: composed from the three
+# quoting aggregates plus the auxiliary packages no aggregate pulls in (PCCS + admin tool,
+# PCK ID retrieval, platform registration, appraisal tool, PCS client, POE gen).
+.PHONY: rpm_psw_pkg
+rpm_psw_pkg: rpm_psw_aesm_pkg \
+             _rpm_dcap_sgx_quoting_support_pkg \
+             _rpm_dcap_tdx__sgx_based_quoting_support_pkg \
              rpm_libsgx_dcap_pccs \
              rpm_pccs_admin_tool_pkg \
-             rpm_libsgx_dcap_ql \
-             rpm_libsgx_ae_qve \
-             rpm_sgx_dcap_quote_verify \
              rpm_sgx_pck_id_retrieval_tool_pkg \
              rpm_sgx_ra_service_pkg \
-             rpm_libsgx_ae_tdqe \
-             rpm_libsgx_tdx_logic \
-             rpm_tdx_qgs \
-             rpm_tdx_attest \
              rpm_tee_appraisal_tool \
-             rpm_libsgx_ae_qae \
              rpm_pcs_client_tool \
-             rpm_tee_poe_gen_tool \
-             rpm_enclave_runtime
+             rpm_tee_poe_gen_tool
 
 .PHONY: rpm_sgx_sdk_pkg
 rpm_sgx_sdk_pkg:
