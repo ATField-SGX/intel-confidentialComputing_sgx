@@ -23,7 +23,7 @@ tips:
 	@echo "     3. If you want to build other targets, please also follow README.md in same directory"
 	@echo "     ----------------------------------------------------------------"
 	@echo "     Prerequisite: run \"make preparation\" to prepare the source code before building other targets."
-	@echo "     ----------------------------------------------------------------"	
+	@echo "     ----------------------------------------------------------------"
 	@echo "     Other targets:"
 	@echo "        1) make sdk : build the Intel(R) SGX SDK (proxied to the SDK submodule)"
 	@echo "        2) make tdx : build Intel(R) TDX components"
@@ -53,7 +53,7 @@ dcap_prebuilts:
 	./download_prebuilt_dcap.sh
 
 psw: enclave_runtime
-	$(MAKE) -C psw/ USE_OPT_LIBS=$(USE_OPT_LIBS)
+	$(MAKE) -C psw/
 
 enclave_runtime:
 	$(MAKE) -C sdk/ enclave_runtime SGX_SDK_VERSION=$(SGX_VERSION)
@@ -62,7 +62,7 @@ sdk_no_mitigation:
 	$(MAKE) -C sdk/ sdk_no_mitigation USE_OPT_LIBS=$(USE_OPT_LIBS) SGX_SDK_VERSION=$(SGX_VERSION)
 
 sdk:
-	$(MAKE) -C sdk/ sdk SGX_SDK_VERSION=$(SGX_VERSION)
+	$(MAKE) -C sdk/ sdk SGX_SDK_VERSION=$(SGX_VERSION) USE_OPT_LIBS=$(USE_OPT_LIBS)
 
 tdx:
 	$(MAKE) -C external/dcap_source/QuoteGeneration pce_logic
@@ -73,7 +73,7 @@ tdx:
 # Retained (used in CI - 'servtdattest' variant). The SDK-side build is proxied
 # to the SDK submodule; the DCAP-side servtd_attest stays in this repo.
 servtd_attest:
-	$(MAKE) -C sdk/ servtd_attest SGX_SDK_VERSION=$(SGX_VERSION)
+	$(MAKE) -C sdk/ servtd_attest SGX_SDK_VERSION=$(SGX_VERSION) USE_OPT_LIBS=$(USE_OPT_LIBS)
 	$(MAKE) -C external/dcap_source/QuoteGeneration servtd_attest
 
 servtd_attest_preparation:
@@ -87,13 +87,13 @@ ipp:
 	$(MAKE) -C sdk/ ipp SGX_SDK_VERSION=$(SGX_VERSION)
 
 sdk_install_pkg_no_mitigation:
-	$(MAKE) -C sdk/ sdk_install_pkg_no_mitigation SGX_SDK_VERSION=$(SGX_VERSION) PKG_OUT_ROOT_DIR="$(ROOT_DIR)/linux/installer"
+	$(MAKE) -C sdk/ sdk_install_pkg_no_mitigation SGX_SDK_VERSION=$(SGX_VERSION) PKG_OUT_ROOT_DIR="$(ROOT_DIR)/linux/installer" USE_OPT_LIBS=$(USE_OPT_LIBS)
 
 sdk_install_pkg:
-	$(MAKE) -C sdk/ sdk_install_pkg SGX_SDK_VERSION=$(SGX_VERSION) PKG_OUT_ROOT_DIR="$(ROOT_DIR)/linux/installer"
+	$(MAKE) -C sdk/ sdk_install_pkg SGX_SDK_VERSION=$(SGX_VERSION) PKG_OUT_ROOT_DIR="$(ROOT_DIR)/linux/installer" USE_OPT_LIBS=$(USE_OPT_LIBS)
 
 sdk_install_pkg_from_source:
-	$(MAKE) -C sdk/ sdk_install_pkg_from_source SGX_SDK_VERSION=$(SGX_VERSION) PKG_OUT_ROOT_DIR="$(ROOT_DIR)/linux/installer"
+	$(MAKE) -C sdk/ sdk_install_pkg_from_source SGX_SDK_VERSION=$(SGX_VERSION) PKG_OUT_ROOT_DIR="$(ROOT_DIR)/linux/installer" USE_OPT_LIBS=$(USE_OPT_LIBS)
 
 # TOMBSTONE: the legacy PSW binary (.bin) installer has been removed.
 # The Linux PSW has been delivered exclusively via DEB/RPM packages since 2019

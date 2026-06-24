@@ -43,7 +43,7 @@ export SGX_SDK
 build: psw dcap
 
 psw: install_sdk enclave_runtime
-	@$(MAKE) -C psw/ USE_OPT_LIBS=$(USE_OPT_LIBS)
+	@$(MAKE) -C psw/
 
 # uRTS / enclave_common now live in the SDK submodule's enclave_runtime.
 enclave_runtime:

@@ -261,56 +261,13 @@ ENCLAVE_LDFLAGS  = $(ENC_LDFLAGS) $(COMMON_LDFLAGS) -Wl,-Bstatic -Wl,-Bsymbolic 
 ENCLAVE_CFLAGS += $(MITIGATION_CFLAGS)
 ENCLAVE_ASFLAGS = $(MITIGATION_ASFLAGS)
 
-# We have below choices as to crypto, math and string libs:
-# 1. crypto - SGXSSL (0), IPP crypto (1)
-# 2. math   - optimized (0), open sourced (1)
-# 3. string - optimized (0), open sourced (1)
+# We have below choices as to the crypto lib used in the SDK (passed-on to the SDK build)
+#   crypto - SGXSSL (0), IPP crypto (1) [default]
 #
-# A macro 'USE_OPT_LIBS' is provided to allow users to build 
-# SGX SDK with different library combination by setting different 
-# value to 'USE_OPT_LIBS'.
-# By default, choose to build SDK using optimized IPP crypto +
-# open sourced string + open sourced math.
-#
-# IPP + open sourced string + open sourced math
+# See: sdk/buildenv.mk for details.
+
+# Default: IPP crypto + open sourced string + open sourced math (1). Set USE_OPT_LIBS=0 to use SGXSSL.
 USE_OPT_LIBS ?= 1
-USE_CRYPTO_LIB ?= 1
-USE_STRING_LIB ?= 1
-USE_MATH_LIB ?= 1
-
-ifeq ($(USE_OPT_LIBS), 0)
-# SGXSSL + open sourced string + open sourced math
-    USE_CRYPTO_LIB := 0
-    USE_MATH_LIB := 1
-    USE_STRING_LIB := 1
-else ifeq ($(USE_OPT_LIBS), 2)
-# SGXSSL + optimized string + optimized math
-    USE_CRYPTO_LIB := 0
-    USE_MATH_LIB := 0
-    USE_STRING_LIB := 0
-else ifeq ($(USE_OPT_LIBS), 3)
-# IPP + optimized string + optimized math
-    USE_CRYPTO_LIB := 1
-    USE_MATH_LIB := 0
-    USE_STRING_LIB := 0
-endif
-
-# macro check
-ifeq ($(USE_MATH_LIB), 0)
-ifneq ($(USE_STRING_LIB), 0)
-$(error ERROR: Optimized math library depends on Optimized string library)
-endif
-endif
-
-ifneq ($(MITIGATION-CVE-2020-0551),)
-ifeq ($(USE_STRING_LIB), 0)
-$(error ERROR: Cannot build a mitigation SDK with Optimized string/math)
-endif
-ifeq ($(USE_MATH_LIB), 0)
-$(error ERROR: Cannot build a mitigation SDK with Optimized string/math)
-endif
-endif
-
 
 IPP_SUBDIR = no_mitigation
 ifeq ($(MITIGATION-CVE-2020-0551), LOAD)
