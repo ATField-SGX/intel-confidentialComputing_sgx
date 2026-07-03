@@ -127,13 +127,13 @@ Supported Operating Systems
 ---------------------------
 The following Linux\* distributions are supported for both building and installing the Intel&reg; SGX software stack:
 
-- Ubuntu\* 22.04, 24.04, and 26.04 LTS Server 64-bit
-- Red Hat Enterprise Linux Server 9.4 and 10.0 64-bit
-- CentOS Stream 9 and 10 64-bit
-- SUSE Linux Enterprise Server 15.6 64-bit
-- Anolis OS 8.10 64-bit
-- Azure Linux 3.0 64-bit
-- Debian 10 and 12 64-bit
+- Ubuntu\* Server (64-bit): 22.04, 24.04, 26.04 LTS
+- Red Hat Enterprise Linux\* Server (64-bit): 9.6, 9.8, 10.0, 10.2
+- CentOS\* Stream (64-bit): 9, 10
+- SUSE Linux Enterprise Server\* (64-bit): 15 SP7, 16
+- Anolis\* OS (64-bit): 8.10
+- Azure\* Linux (64-bit): 3.0
+- Debian\* (64-bit): 10, 12, 13
 
 
 Building
@@ -150,13 +150,13 @@ Building
 
 - Install the additional tools required to build the Intel&reg; SGX PSW:
   1)  System libraries and build tools — install the packages for your distribution:
-      * On Debian 10, Debian 12, Ubuntu 22.04, Ubuntu 24.04, and Ubuntu 26.04:
+      * On Debian 10, Debian 12, Debian 13, Ubuntu 22.04, Ubuntu 24.04, and Ubuntu 26.04:
         ```bash
         sudo apt-get install libssl-dev libcurl4-openssl-dev protobuf-compiler \
             libprotobuf-dev debhelper cmake reprepro unzip pkgconf libboost-dev \
             libboost-system-dev libboost-thread-dev lsb-release libsystemd0
         ```
-      * On Red Hat Enterprise Linux 9.4 and 10.0:
+      * On Red Hat Enterprise Linux 9.6, 9.8, 10.0, and 10.2:
         ```bash
         sudo yum install openssl-devel libcurl-devel protobuf-devel cmake \
             rpm-build createrepo yum-utils pkgconf boost-devel \
@@ -180,7 +180,7 @@ Building
             protobuf-devel cmake rpm-build createrepo yum-utils pkgconf \
             boost-devel protobuf-lite-devel systemd-libs
         ```
-      * On SUSE Linux Enterprise Server 15.6:
+      * On SUSE Linux Enterprise Server 15 SP7 and 16:
         ```bash
         sudo zypper install libopenssl-devel libcurl-devel protobuf-devel cmake \
             rpm-build createrepo_c libsystemd0 libboost_system1_66_0-devel \
@@ -315,7 +315,7 @@ The Intel&reg; SGX Platform Software (PSW) covers the following components built
     > ```bash
     > export PATH=$PATH:/sbin
     > ```
-  * **RPM-based systems** (RHEL 9.4/10.0, CentOS Stream 9/10, Anolis OS 8.10, SLES 15.6):
+  * **RPM-based systems** (RHEL 9.6/9.8/10.0/10.2, CentOS Stream 9/10, Anolis OS 8.10, SLES 15 SP7/16):
     ```bash
     make rpm_psw_pkg
     ```
@@ -327,7 +327,7 @@ The Intel&reg; SGX Platform Software (PSW) covers the following components built
       sudo dnf config-manager --save --setopt="*sgx_rpm_local_repo*.priority=1" \
                                      --setopt="*sgx_rpm_local_repo*.gpgcheck=0"
       ```
-    * On SLES 15.6:
+    * On SLES 15 SP7/16:
       ```bash
       sudo zypper addrepo --priority 1 --no-gpgcheck \
         $PWD/linux/installer/rpm/sgx_rpm_local_repo sgx-local
