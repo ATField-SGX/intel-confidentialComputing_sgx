@@ -7,27 +7,13 @@
 top_dir=`dirname $0`
 out_dir=$top_dir
 VERSION=2.30
-optlib_name=optimized_libs_${VERSION}.tar.gz
 ae_file_name=prebuilt_ae_${VERSION}.tar.gz
 binutils_file_name=as.ld.objdump.r4.tar.gz
 checksum_file=SHA256SUM_prebuilt_${VERSION}.cfg
 server_url_path=https://download.01.org/intel-sgx/sgx-linux/${VERSION}
-server_optlib_url=$server_url_path/$optlib_name
 server_ae_url=$server_url_path/$ae_file_name
 server_binutils_url=$server_url_path/$binutils_file_name
 server_checksum_url=$server_url_path/$checksum_file
-
-# NOTE (consider): post SDK-extraction the optlibs payload relevant to PSW is IPP
-# (external/ippcp_internal/*), which is now provided SDK-side and excluded below.
-# No PSW/common target links IPP; the only remaining references are two dead
-# include dirs in the ecdsa/quote_ex AESM bundles. Once those are removed, this
-# optlibs download could likely be dropped here (keeping prebuilt_ae + binutils).
-rm -f $out_dir/$optlib_name
-wget $server_optlib_url -P $out_dir
-if [ $? -ne 0 ]; then
-    echo "Fail to download file $server_optlib_url"
-    exit -1
-fi
 
 rm -f $out_dir/$ae_file_name
 wget $server_ae_url -P $out_dir
@@ -53,17 +39,14 @@ fi
 
 pushd $out_dir
 
-sha256sum -c $checksum_file
+sha256sum -c --ignore-missing $checksum_file
 if [ $? -ne 0 ]; then
     echo "Checksum verification failure"
     exit -1
 fi
 
-# IPP is now provided SDK-side; never extract it from the PSW prebuilt optlibs.
-tar -zxf $optlib_name --exclude='external/ippcp_internal/*'
 tar -zxf $ae_file_name
 tar -zxf $binutils_file_name
-rm -f $optlib_name
 rm -f $ae_file_name
 rm -f $checksum_file
 rm -f $binutils_file_name
