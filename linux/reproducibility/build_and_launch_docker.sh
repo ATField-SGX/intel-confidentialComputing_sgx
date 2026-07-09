@@ -172,19 +172,26 @@ prepare_sdk_installer()
     fi
 }
 
+# generate_cmd_script <cmd_file> <start_script_basename> <build_type>
+# Writes a container entry script that sources the NIX profile and runs the
+# given reproducible start script (found at $mount_dir/<basename>) for the
+# given build type.
 generate_cmd_script()
 {
-    rm -f $code_dir/cmd.sh
+    local cmd_file="$1"
+    local start_script="$2"
+    local build_type="$3"
+    rm -f "$cmd_file"
 
-    cat > $code_dir/cmd.sh << EOF
+    cat > "$cmd_file" << EOF
 #!/usr/bin/env bash
 
 . ~/.bash_profile
-nix-shell ~/shell.nix --run "$mount_dir/start_build.sh $type"
+nix-shell ~/shell.nix --run "$mount_dir/$start_script $build_type"
 
 EOF
 
-    chmod +x $code_dir/cmd.sh
+    chmod +x "$cmd_file"
 }
 
 ######################################################
@@ -211,12 +218,47 @@ case $type in
         exit 1
 esac
 
-cp $script_dir/start_build.sh.tmpl $code_dir/start_build.sh
-chmod +x $code_dir/start_build.sh
-generate_cmd_script
+# ---------------------------------------------------------------------------
+# Reproducible-build path note (bit-for-bit equality with the SDK repo build)
+# ---------------------------------------------------------------------------
+# IPP and the SDK must be built with the SDK source physically rooted at
+# "$mount_dir/sgx" (i.e. /linux-sgx/sgx), exactly as the standalone SDK-repo
+# reproducible build does. If the SDK is instead built from the full SGX repo
+# (where it lives under sgx/sdk/), the extra "sdk/" path segment gets baked into
+# DWARF/debug strings, IPP generated-asm source paths and archive member names,
+# breaking byte-for-byte equality with the SDK-repo artifacts even though the
+# emitted code is identical.
+#
+# We therefore build in up to two container passes:
+#   Pass 1 (SDK + IPP): bind-mount the SDK submodule subtree ($code_dir/sgx/sdk)
+#       at "$mount_dir/sgx" and reuse the SDK submodule's OWN reproducible start
+#       script, so the build is identical to the standalone SDK-repo build.
+#   Pass 2 (AE): bind-mount the full SGX repo at "$mount_dir" (unchanged); AEs
+#       are not built by the SDK repo, so there is nothing to match for them.
+# Both passes write artifacts to the shared "$code_dir/out".
+
+# AE / interactive start script (used with the full SGX repo mounted at $mount_dir).
+cp "$script_dir/start_build.sh.tmpl" "$code_dir/start_build.sh"
+chmod +x "$code_dir/start_build.sh"
+
+# SDK/IPP start script: use the SDK submodule's own reproducible build script so
+# the SDK + IPP build steps are byte-for-byte identical to the standalone
+# SDK-repo reproducible build.
+sdk_start_src="$sgx_repo/sdk/build_infrastructure/linux/reproducibility/start_build.sh.tmpl"
+if [ ! -f "$sdk_start_src" ]; then
+    echo "ERROR: SDK submodule reproducible start script not found:"
+    echo "       $sdk_start_src"
+    echo "       Ensure the sdk/ submodule is checked out ('make preparation')."
+    exit 1
+fi
+cp "$sdk_start_src" "$code_dir/start_build_sdk.sh"
+chmod +x "$code_dir/start_build_sdk.sh"
+
+# Shared output directory (created host-side so the bind mount is host-owned).
+mkdir -p "$code_dir/out"
 
 ######################################################
-# Step 2: Build docker image and launch the container
+# Step 2: Build docker image and launch the container(s)
 ######################################################
 # Check if the image already exists. If not, build the docker image
 set +e && docker image inspect sgx.build.env:latest > /dev/null 2>&1 && set -e
@@ -243,10 +285,62 @@ if [ -t 0 ] && [ -t 1 ]; then
   DOCKER_RUN_ARGS+=(-it)
 fi
 
-DOCKER_CMD=(docker run "${DOCKER_RUN_ARGS[@]}" -v "$code_dir:$mount_dir" --network none --rm sgx.build.env)
+# Pass 1 - SDK + IPP, with the SDK subtree rooted at $mount_dir/sgx so embedded
+# paths match the SDK-repo build exactly. $1 is the SDK-side build type
+# (all = ipp+sdk | sdk | ipp).
+run_sdk_ipp_pass()
+{
+    local sdk_type="$1"
+    generate_cmd_script "$code_dir/cmd_sdk.sh" "start_build.sh" "$sdk_type"
+    docker run "${DOCKER_RUN_ARGS[@]}" \
+        -v "$code_dir/sgx/sdk:$mount_dir/sgx" \
+        -v "$code_dir/out:$mount_dir/out" \
+        -v "$code_dir/start_build_sdk.sh:$mount_dir/start_build.sh" \
+        -v "$code_dir/cmd_sdk.sh:$mount_dir/cmd.sh" \
+        --network none --rm sgx.build.env \
+        /bin/bash -c "$mount_dir/cmd.sh"
+}
+
+# Pass 2 - AEs, with the full SGX repo mounted at $mount_dir (path embedding
+# unchanged). Consumes the SDK installer produced by pass 1 from $code_dir/out.
+run_ae_pass()
+{
+    generate_cmd_script "$code_dir/cmd.sh" "start_build.sh" "ae"
+    docker run "${DOCKER_RUN_ARGS[@]}" \
+        -v "$code_dir:$mount_dir" \
+        --network none --rm sgx.build.env \
+        /bin/bash -c "$mount_dir/cmd.sh"
+}
+
+# Interactive - no reproduce-type requested: drop into the container with the
+# full SGX repo mounted so the user can build whatever they want by hand.
+run_interactive()
+{
+    docker run "${DOCKER_RUN_ARGS[@]}" \
+        -v "$code_dir:$mount_dir" \
+        --network none --rm sgx.build.env
+}
 
 if [ $type_flag = 0 ]; then
-  "${DOCKER_CMD[@]}"
+    run_interactive
 else
-  "${DOCKER_CMD[@]}" /bin/bash -c "$mount_dir/cmd.sh"
+    case $type in
+        "ipp")
+            run_sdk_ipp_pass ipp
+            ;;
+        "sdk")
+            run_sdk_ipp_pass sdk
+            ;;
+        "all")
+            run_sdk_ipp_pass all
+            run_ae_pass
+            ;;
+        "ae")
+            run_ae_pass
+            ;;
+        *)
+            echo "Unsupported reproducibility type."
+            exit 1
+            ;;
+    esac
 fi

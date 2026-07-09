@@ -143,8 +143,18 @@ case "$type" in
         echo "All the targets are built out and could be found under $build_out"
         ;;
     "ae")
-        sdk_installer=$(ls $script_dir/sgx_linux_x64_sdk_*.bin)
-        build_ae $sdk_installer
+        # Prefer the SDK installer produced by the SDK/IPP pass (out/sdk/); fall
+        # back to one staged at the mount root (standalone 'ae' via -i/download).
+        sdk_installers=( "$build_out"/sdk/sgx_linux_x64_sdk_*.bin )
+        if [ ! -f "${sdk_installers[0]}" ]; then
+            sdk_installers=( "$script_dir"/sgx_linux_x64_sdk_*.bin )
+        fi
+        if [ "${#sdk_installers[@]}" -ne 1 ] || [ ! -f "${sdk_installers[0]}" ]; then
+            echo "ERROR: expected exactly one SDK installer; found: ${sdk_installers[*]}" >&2
+            exit 1
+        fi
+        sdk_installer="${sdk_installers[0]}"
+        build_ae "$sdk_installer"
         echo "The built out AEs could be found under $build_out/ae"
         ;;
     "sdk")
