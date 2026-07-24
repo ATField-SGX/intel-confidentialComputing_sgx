@@ -96,8 +96,7 @@ build_enclave_runtime() {
     # The runtime libraries (libsgx-urts, libsgx-enclave-common[-devel], libsgx-headers)
     # are owned by the sgx-enclave-runtime package. Build them here too so the full set of
     # RPMs is produced without anyone having to invoke sgx-enclave-runtime directly.
-    # v-- ENCLAVE_RUNTIME_EXTRACT: update this path to the SDK submodule once sgx-enclave-runtime is extracted to the standalone SDK repo
-    local er_build="${cur_dir}/../sgx-enclave-runtime/build.sh"
+    local er_build="${root_dir}/sdk/build_infrastructure/linux/installer/rpm/sgx-enclave-runtime/build.sh"
     if [ -x "${er_build}" ]; then
         "${er_build}"
     else

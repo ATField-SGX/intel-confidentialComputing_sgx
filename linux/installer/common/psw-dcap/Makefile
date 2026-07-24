@@ -47,8 +47,7 @@ RAU_MAJOR_VER:=$(word 1,$(subst ., ,$(RAU_FULL_VER)))
 CUR_PATH:=$(realpath $(dir $(lastword $(MAKEFILE_LIST))))
 BOM_PATH:=$(CUR_PATH)/BOM_install
 GEN_SCRIPT:=$(realpath $(CUR_PATH)/../gen_source/copy_source.py)
-# v-- ENCLAVE_RUNTIME_EXTRACT: update this path to the SDK submodule once sgx-enclave-runtime is extracted to the standalone SDK repo
-ENCLAVE_RUNTIME_DIR:=$(realpath $(CUR_PATH)/../sgx-enclave-runtime)
+ENCLAVE_RUNTIME_DIR:=$(realpath $(SRCDIR)/sdk/build_infrastructure/linux/installer/common/sgx-enclave-runtime)
 
 PACKAGE_ROOT_PATH:=$(SRCDIR)/build/pkgroot
 
@@ -151,11 +150,11 @@ $(foreach PKG,$(AESM_SERVICE_PKGS) $(AE_PKGS) $(DEV_LIB_PKGS) $(DCAP_PCCS_PACKAG
 # Enclave runtime libraries and developer headers are delegated to sgx-enclave-runtime
 PHONY+=install_enclave_runtime
 install_enclave_runtime:
-	$(MAKE) -I $(ENCLAVE_RUNTIME_DIR) -f $(ENCLAVE_RUNTIME_DIR)/Makefile SRCDIR=$(SRCDIR) DESTDIR=$(DESTDIR) ENCLAVE_RUNTIME_MAKEFILE_DIR=$(ENCLAVE_RUNTIME_DIR) install-runtime
+	$(MAKE) -I $(ENCLAVE_RUNTIME_DIR) -f $(ENCLAVE_RUNTIME_DIR)/Makefile SRCDIR=$(SRCDIR)/sdk DESTDIR=$(DESTDIR) ENCLAVE_RUNTIME_MAKEFILE_DIR=$(ENCLAVE_RUNTIME_DIR) install-runtime
 
 PHONY+=install_enclave_runtime_dev
 install_enclave_runtime_dev:
-	$(MAKE) -I $(ENCLAVE_RUNTIME_DIR) -f $(ENCLAVE_RUNTIME_DIR)/Makefile SRCDIR=$(SRCDIR) DESTDIR=$(DESTDIR) ENCLAVE_RUNTIME_MAKEFILE_DIR=$(ENCLAVE_RUNTIME_DIR) install-dev
+	$(MAKE) -I $(ENCLAVE_RUNTIME_DIR) -f $(ENCLAVE_RUNTIME_DIR)/Makefile SRCDIR=$(SRCDIR)/sdk DESTDIR=$(DESTDIR) ENCLAVE_RUNTIME_MAKEFILE_DIR=$(ENCLAVE_RUNTIME_DIR) install-dev
 
 PHONY+=$(ALL_PKGS)
 PHONY+=$(foreach PKG,$(ALL_PKGS),pre_$(PKG))

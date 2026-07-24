@@ -29,14 +29,15 @@
 #
 #
 
-include buildenv.mk
-
 define DIR_EXISTS
 $(shell test -d $(1) && echo "$(1)")
 endef
 
-SGX_SDK := /tmp/intel/sgxsdk
+# Repo-local SDK install (vs /opt/intel/sgxsdk system SDK): avoids permission issues in rpmbuild, and each rpmbuild gets its own SDK under BUILD/<pkg>/build/. Override with SGX_SDK=...
+SGX_SDK ?= $(ROOT_DIR)/build/sgxsdk
 export SGX_SDK
+
+include buildenv.mk
 
 .PHONY: build psw dcap install clean sdk install_sdk ippcp enclave_runtime
 
@@ -46,7 +47,11 @@ psw: install_sdk enclave_runtime
 	@$(MAKE) -C psw/
 
 # uRTS / enclave_common now live in the SDK submodule's enclave_runtime.
-enclave_runtime:
+# Must run AFTER install_sdk: the SDK build does destructive `make -C sdk/ clean`
+# passes (LOAD/CF/default mitigation flavors) that wipe the shared sdk/build/linux.
+# Building the enclave runtime afterwards keeps its libs in build/linux, which the
+# installer step then packages. The order-only prereq makes this safe under -j.
+enclave_runtime: | install_sdk
 	@$(MAKE) -C sdk/ enclave_runtime SGX_SDK_VERSION=$(SGX_VERSION)
 
 dcap: install_sdk
@@ -87,5 +92,6 @@ sdk: ippcp
 install_sdk: sdk
 	$(MAKE) -C sdk/ sdk_install_pkg SGX_SDK_VERSION=$(SGX_VERSION) PKG_OUT_ROOT_DIR="$(ROOT_DIR)/linux/installer"
 ifeq ($(call DIR_EXISTS,$(SGX_SDK)),)
+	@mkdir -p $(dir $(SGX_SDK))
 	./linux/installer/bin/sgx_linux_x64_sdk_*.bin --prefix=$(dir $(SGX_SDK))
 endif

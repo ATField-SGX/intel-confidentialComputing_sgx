@@ -1,2 +1,0 @@
-DeliveryName	InstallName	FileCheckSum	FileFeature	FileOwner
-<deliverydir>/build/linux/libsgx_urts.so	<installdir>/lib/libsgx_urts.so	0	main	STP
