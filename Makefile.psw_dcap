@@ -56,13 +56,13 @@ enclave_runtime: | install_sdk
 
 dcap: install_sdk
 	# Workaround until fixed in DCAP: prebuild race-prone targets, then skip
-	# re-entering them in the full DCAP build; build only RPM PcsClientTool.
+	# re-entering them in the full DCAP build.
 	@$(MAKE) -C external/dcap_source/external
 	@$(MAKE) -j1 -C external/dcap_source/ QuoteVerification
 	@$(MAKE) -j1 -C external/dcap_source/ PCKCertSelection
-	# The default PckClientTool target also builds DEB packages and needs dpkg.
-	@$(MAKE) -C external/dcap_source/tools/PcsClientTool rpm_sgx_pcs_client_pkg
-	# WinPle targets build Windows PLE artifacts, not Linux RPM content. 
+	@$(MAKE) -j1 -C external/dcap_source/QuoteVerification tee_appraisal_tool
+	@$(MAKE) -C external/dcap_source PoeTools_rpm
+	# WinPle targets build Windows PLE artifacts, not Linux RPM content.
 	#  Note: if wanting to build them, and using OpenSSL 3x CLI, make sure to use --traditional for PLE signing key generation
 	@$(MAKE) -C external/dcap_source/ -o ThirdParty -o QuoteVerification -o PCKCertSelection -o PckClientTool -o WinPle -o WinPleIntel
 
@@ -73,9 +73,16 @@ clean:
 	@$(MAKE) -C psw/                  clean
 	@$(MAKE) -C external/dcap_source/ clean
 	@$(MAKE) -C sdk/                  clean
-ifneq ($(call DIR_EXISTS,$(SGX_SDK)),)
-	$(SGX_SDK)/uninstall.sh
-endif
+	@# Only uninstall a REPO-LOCAL SDK built under $(ROOT_DIR)/build/. A writable check
+	@# is NOT sufficient: when the build runs as root (e.g. in a container) a system SDK
+	@# such as /opt/intel/sgxsdk is also writable and must never be torn down. Gate on
+	@# the SDK path being inside $(ROOT_DIR)/build/ and require an executable
+	@# uninstall.sh. Non-fatal (leading '-'): this runs in rpmbuild %clean after packaging.
+	-@sdk_abs="$(abspath $(SGX_SDK))"; build_abs="$(abspath $(ROOT_DIR)/build)"; \
+	 case "$$sdk_abs/" in \
+	   "$$build_abs"/*) [ -x "$$sdk_abs/uninstall.sh" ] && "$$sdk_abs/uninstall.sh" || : ;; \
+	   *) : ;; \
+	 esac
 
 # IPP now lives inside the SDK submodule; proxy the build to it.
 ippcp:

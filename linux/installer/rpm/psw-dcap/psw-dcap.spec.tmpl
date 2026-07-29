@@ -36,6 +36,16 @@
 %define _psw_version @psw_version@
 %define _dcap_version @dcap_version@
 %define _license_file COPYING
+%define _pcs_client_path /opt/intel/pcs-client-tool
+%define _pcs_client_venv_dir %{_pcs_client_path}/.venv
+%define _pcs_client_main_script pcsclient.py
+%define _pcs_client_wrapper pcs-client-tool
+%define _pccs_admin_path /opt/intel/pccs-admin-tool
+%define _pccs_admin_venv_dir %{_pccs_admin_path}/.venv
+%define _pccs_admin_main_script pccsadmin.py
+%define _pccs_admin_wrapper pccs-admin-tool
+%define _poe_gen_path /opt/intel/intel-tee-poe-gen-tool
+%define _poe_gen_tool_name poe-gen-tool
 
 Name:           sgx-aesm-service
 Version:        %{_psw_version}
@@ -213,6 +223,7 @@ Intel(R) Software Guard Extensions Data Center Attestation Primitives Quote Veri
 %package -n sgx-dcap-pccs
 Version:       %{_dcap_version}
 Summary:       Intel(R) Software Guard Extensions PCK Caching Service
+BuildArch:     noarch
 Requires:      gcc gcc-c++ make
 
 %description -n sgx-dcap-pccs
@@ -264,6 +275,55 @@ Recommends:    libsgx-urts >= %{_psw_version} libsgx-ae-pce >= %{version}-%{rele
 %description -n sgx-pck-id-retrieval-tool
 Intel(R) Software Guard Extensions:this tool is used to collect the platform information to retrieve the PCK certs from PCS(Provisioning Certification Server)
 
+%package -n libsgx-ae-qae
+Version:       %{_dcap_version}
+Summary:       Intel(R) Software Guard Extensions QAE
+AutoProv:      no
+
+%description -n libsgx-ae-qae
+Intel(R) Software Guard Extensions QAE
+
+%package -n tee-appraisal-tool
+Version:       %{_dcap_version}
+Summary:       Intel(R) Software Guard Extensions Data Center Attestation Primitives Appraisal Tool
+AutoProv:      no
+
+%description -n tee-appraisal-tool
+Intel(R) Software Guard Extensions Data Center Attestation Primitives Appraisal Tool
+
+%package -n intel-tee-pcs-client-tool
+Version:       %{_dcap_version}
+Summary:       Intel(R) SGX and Intel(R) TDX Provisioning Certification Service (Intel PCS) Client Tool
+BuildArch:     noarch
+Requires:      bash coreutils
+Requires:      python3 >= 3.7 python3-pip
+Provides:      %{_pcs_client_wrapper}
+Enhances:      intel-tee-pccs-admin-tool >= %{version}-%{release} sgx-pck-id-retrieval-tool >= %{version}-%{release} libsgx-dcap-default-qpl >= %{version}-%{release}
+
+%description -n intel-tee-pcs-client-tool
+This package provides the %{_pcs_client_wrapper} executable (python script) for interacting with the Intel PCS web service REST API.
+
+%package -n intel-tee-pccs-admin-tool
+Version:       %{_dcap_version}
+Summary:       Intel(R) Provisioning Certificate Caching Service (PCCS) Admin Tool
+BuildArch:     noarch
+Requires:      bash coreutils
+Requires:      python3 >= 3.7 python3-pip
+Provides:      %{_pccs_admin_wrapper}
+Enhances:      sgx-dcap-pccs >= %{version}-%{release}
+Suggests:      intel-tee-pcs-client-tool >= %{version}-%{release}
+
+%description -n intel-tee-pccs-admin-tool
+Intel(R) Provisioning Certificate Caching Service (PCCS) Admin Tool
+
+%package -n intel-tee-poe-gen-tool
+Version:       %{_dcap_version}
+Provides:      poe-gen-tool
+Summary:       Intel(R) Platform Ownership Endorsement(POE) Tool
+
+%description -n intel-tee-poe-gen-tool
+This tool is used to collect the platform instance ID, then to generate the platform ownership endorsement
+
 %prep
 %setup -qc
 
@@ -289,15 +349,19 @@ for pkg in $(ls -A %{?buildroot} 2> /dev/null |grep -v "license"); do
     grep -v "^%{_libdir}" | \
     grep -v "^%{_includedir}" | \
     grep -v "^%{_sysconfdir}" | \
+    grep -v "^%{_bindir}" | \
     grep -v "^%{_aesm_service_path}" | \
     grep -v "^%{_dcap_pccs_path}" | \
     grep -v "^%{_ra_service_path}" | \
     grep -v "^%{_pck_id_retrieval_tool_path}" | \
+    grep -v "^%{_pcs_client_path}" | \
+    grep -v "^%{_pccs_admin_path}" | \
+    grep -v "^%{_poe_gen_path}" | \
     sed -e "s#^#%dir #" > %{_specdir}/list-${pkg}
     for f in $(find %{?buildroot}/${pkg}); do
         if [ -d ${f} ]; then
             echo ${f} | sed -e "s#^%{?buildroot}/${pkg}##" | \
-            grep -E "^%{_aesm_service_path}|^%{_dcap_pccs_path}|^%{_ra_service_path}|^%{_pck_id_retrieval_tool_path}" | \
+            grep -E "^%{_aesm_service_path}|^%{_dcap_pccs_path}|^%{_ra_service_path}|^%{_pck_id_retrieval_tool_path}|^%{_pcs_client_path}|^%{_pccs_admin_path}|^%{_poe_gen_path}" | \
             sed -e "s#^#%dir #" >> %{_specdir}/list-${pkg}
         else
             echo ${f} | \
@@ -310,6 +374,12 @@ for pkg in $(ls -A %{?buildroot} 2> /dev/null |grep -v "license"); do
            -e 's:^%{_dcap_pccs_path}/config/default\.json:%config &:' %{_specdir}/list-${pkg}
 done
 rm -fr %{?buildroot}/license
+
+echo "%%ghost %{_pcs_client_path}/%{_pcs_client_wrapper}" >> %{_specdir}/list-intel-tee-pcs-client-tool
+echo "%%ghost %{_bindir}/%{_pcs_client_wrapper}"          >> %{_specdir}/list-intel-tee-pcs-client-tool
+echo "%%ghost %{_pccs_admin_path}/%{_pccs_admin_wrapper}" >> %{_specdir}/list-intel-tee-pccs-admin-tool
+echo "%%ghost %{_bindir}/%{_pccs_admin_wrapper}"          >> %{_specdir}/list-intel-tee-pccs-admin-tool
+echo "%%ghost %{_bindir}/%{_poe_gen_tool_name}"           >> %{_specdir}/list-intel-tee-poe-gen-tool
 
 %clean
 make clean
@@ -340,6 +410,11 @@ make clean
 %files -n libsgx-ra-uefi-devel -f %{_specdir}/list-libsgx-ra-uefi-devel
 %files -n sgx-ra-service -f %{_specdir}/list-sgx-ra-service
 %files -n sgx-pck-id-retrieval-tool -f %{_specdir}/list-sgx-pck-id-retrieval-tool
+%files -n libsgx-ae-qae -f %{_specdir}/list-libsgx-ae-qae
+%files -n tee-appraisal-tool -f %{_specdir}/list-tee-appraisal-tool
+%files -n intel-tee-pcs-client-tool -f %{_specdir}/list-intel-tee-pcs-client-tool
+%files -n intel-tee-pccs-admin-tool -f %{_specdir}/list-intel-tee-pccs-admin-tool
+%files -n intel-tee-poe-gen-tool -f %{_specdir}/list-intel-tee-poe-gen-tool
 
 %posttrans
 if [ -x %{_aesm_service_path}/startup.sh ]; then %{_aesm_service_path}/startup.sh; fi
@@ -372,6 +447,122 @@ trigger_udev() {
 if [ -c /dev/sgx_provision -o -c /dev/sgx/provision ]; then
     getent group sgx_prv &> /dev/null || groupadd sgx_prv
     trigger_udev
+fi
+
+%post -n intel-tee-pcs-client-tool -p /bin/bash
+set -Eeuo pipefail
+
+on_pip_error() {
+    error_code=$?
+    if [[ "${pip_output:-}" == *Network* ]] || [[ "${pip_output:-}" == *ProxyError* ]] || [[ "${pip_output:-}" == *NewConnectionError* ]] || [[ "${pip_output:-}" == *SSLError* ]]; then
+        echo -e "ERROR: 'pip install' failed with exit code ${error_code}. See the %post output above for details.\n" >&2
+        echo "Note: if this is network-related and you are behind a proxy, set the proxy env vars and retry, e.g.:" >&2
+        echo "      #> https_proxy=http://proxy.example.com:1234 dnf install intel-tee-pcs-client-tool" >&2
+        echo "      See: https://pip.pypa.io/en/stable/user_guide/#using-a-proxy-server" >&2
+        echo "      Detected: http_proxy=[${http_proxy:-not set}] https_proxy=[${https_proxy:-not set}] no_proxy=[${no_proxy:-not set}]" >&2
+    fi
+    exit ${error_code}
+}
+
+if [ -d "%{_pcs_client_venv_dir}" ]; then rm -rf "%{_pcs_client_venv_dir}"; fi
+python3 -m venv "%{_pcs_client_venv_dir}"
+source "%{_pcs_client_venv_dir}/bin/activate"
+OUT_STREAM=$( [ -t 1 ] && [ -e /dev/tty ] && [ -w /dev/tty ] && echo /dev/tty || echo /dev/stderr )
+trap 'on_pip_error' ERR
+export PIP_DEFAULT_TIMEOUT=${PIP_DEFAULT_TIMEOUT:-5}
+export PIP_RETRIES=${PIP_RETRIES:-1}
+pip_output=$(python3 -m pip install --no-input --require-virtualenv --upgrade pip 2>&1 | tee ${OUT_STREAM})
+pip_output=$(python3 -m pip install --no-input --require-virtualenv --upgrade setuptools wheel 2>&1 | tee ${OUT_STREAM})
+pip_output=$(python3 -m pip install --no-input --require-virtualenv -r "%{_pcs_client_path}/requirements.txt" 2>&1 | tee ${OUT_STREAM})
+trap - ERR
+
+%posttrans -n intel-tee-pcs-client-tool
+cat <<EOF > "%{_pcs_client_path}/%{_pcs_client_wrapper}"
+#!/usr/bin/env bash
+source "%{_pcs_client_venv_dir}/bin/activate"
+exec PCS_CLIENT_TOOL_EXECUTABLE_WRAPPER=%{_pcs_client_wrapper} PYTHONPYCACHEPREFIX="%{_pcs_client_venv_dir}/__pycache__" python3 "%{_pcs_client_path}/%{_pcs_client_main_script}" "\$@"
+EOF
+chmod +x "%{_pcs_client_path}/%{_pcs_client_wrapper}"
+if [ -e "%{_bindir}/%{_pcs_client_wrapper}" ] && [ ! -L "%{_bindir}/%{_pcs_client_wrapper}" ]; then
+    echo "ERROR: %{_bindir}/%{_pcs_client_wrapper} exists and is not a symlink; refusing to overwrite." >&2
+    exit 1
+fi
+ln -sf "%{_pcs_client_path}/%{_pcs_client_wrapper}" %{_bindir}/%{_pcs_client_wrapper}
+
+%preun -n intel-tee-pcs-client-tool
+if [ -d "%{_pcs_client_path}" ]; then
+    find "%{_pcs_client_path}" -type d -name "__pycache__" -exec rm -rf {} +
+fi
+if [ $1 -ne 0 ]; then exit 0; fi
+rm -rf "%{_pcs_client_venv_dir}"
+rm -f "%{_pcs_client_path}/%{_pcs_client_wrapper}"
+rm -f "%{_bindir}/%{_pcs_client_wrapper}"
+
+%post -n intel-tee-pccs-admin-tool -p /bin/bash
+set -Eeuo pipefail
+
+on_pip_error() {
+    error_code=$?
+    if [[ "${pip_output:-}" == *Network* ]] || [[ "${pip_output:-}" == *ProxyError* ]] || [[ "${pip_output:-}" == *NewConnectionError* ]] || [[ "${pip_output:-}" == *SSLError* ]]; then
+        echo -e "ERROR: 'pip install' failed with exit code ${error_code}. See the %post output above for details.\n" >&2
+        echo "Note: if this is network-related and you are behind a proxy, set the proxy env vars and retry, e.g.:" >&2
+        echo "      #> https_proxy=http://proxy.example.com:1234 dnf install intel-tee-pccs-admin-tool" >&2
+        echo "      See: https://pip.pypa.io/en/stable/user_guide/#using-a-proxy-server" >&2
+        echo "      Detected: http_proxy=[${http_proxy:-not set}] https_proxy=[${https_proxy:-not set}] no_proxy=[${no_proxy:-not set}]" >&2
+    fi
+    exit ${error_code}
+}
+
+if [ -d "%{_pccs_admin_venv_dir}" ]; then rm -rf "%{_pccs_admin_venv_dir}"; fi
+python3 -m venv "%{_pccs_admin_venv_dir}"
+source "%{_pccs_admin_venv_dir}/bin/activate"
+OUT_STREAM=$( [ -t 1 ] && [ -e /dev/tty ] && [ -w /dev/tty ] && echo /dev/tty || echo /dev/stderr )
+trap 'on_pip_error' ERR
+export PIP_DEFAULT_TIMEOUT=${PIP_DEFAULT_TIMEOUT:-5}
+export PIP_RETRIES=${PIP_RETRIES:-1}
+pip_output=$(python3 -m pip install --no-input --require-virtualenv --upgrade pip 2>&1 | tee ${OUT_STREAM})
+pip_output=$(python3 -m pip install --no-input --require-virtualenv --upgrade setuptools wheel 2>&1 | tee ${OUT_STREAM})
+pip_output=$(python3 -m pip install --no-input --require-virtualenv -r "%{_pccs_admin_path}/requirements.txt" 2>&1 | tee ${OUT_STREAM})
+trap - ERR
+
+%posttrans -n intel-tee-pccs-admin-tool
+cat <<EOF > "%{_pccs_admin_path}/%{_pccs_admin_wrapper}"
+#!/usr/bin/env bash
+source "%{_pccs_admin_venv_dir}/bin/activate"
+PCCS_ADMIN_TOOL_EXECUTABLE_WRAPPER=%{_pccs_admin_wrapper} PYTHONPYCACHEPREFIX="%{_pccs_admin_venv_dir}/__pycache__" python3 "%{_pccs_admin_path}/%{_pccs_admin_main_script}" "\$@"
+EOF
+chmod +x "%{_pccs_admin_path}/%{_pccs_admin_wrapper}"
+# Guard against clobbering a real file owned by another package: replace our own
+# symlink (idempotent for upgrades/reinstalls) but fail clearly on a regular file.
+if [ -e "%{_bindir}/%{_pccs_admin_wrapper}" ] && [ ! -L "%{_bindir}/%{_pccs_admin_wrapper}" ]; then
+    echo "ERROR: %{_bindir}/%{_pccs_admin_wrapper} exists and is not a symlink; refusing to overwrite." >&2
+    exit 1
+fi
+ln -sf "%{_pccs_admin_path}/%{_pccs_admin_wrapper}" %{_bindir}/%{_pccs_admin_wrapper}
+
+%preun -n intel-tee-pccs-admin-tool
+if [ -d "%{_pccs_admin_path}" ]; then
+    find "%{_pccs_admin_path}" -type d -name "__pycache__" -exec rm -rf {} +
+fi
+if [ $1 -ne 0 ]; then exit 0; fi
+rm -rf "%{_pccs_admin_venv_dir}"
+rm -f "%{_pccs_admin_path}/%{_pccs_admin_wrapper}"
+rm -f "%{_bindir}/%{_pccs_admin_wrapper}"
+
+%posttrans -n intel-tee-poe-gen-tool
+if [ ! -f %{_poe_gen_path}/%{_poe_gen_tool_name} ]; then
+    echo "ERROR: %{_poe_gen_path}/%{_poe_gen_tool_name} not found." >&2
+    exit 6
+fi
+if [ -e "%{_bindir}/%{_poe_gen_tool_name}" ] && [ ! -L "%{_bindir}/%{_poe_gen_tool_name}" ]; then
+    echo "ERROR: %{_bindir}/%{_poe_gen_tool_name} exists and is not a symlink; refusing to overwrite." >&2
+    exit 1
+fi
+ln -s -f %{_poe_gen_path}/%{_poe_gen_tool_name} %{_bindir}/%{_poe_gen_tool_name}
+
+%postun -n intel-tee-poe-gen-tool
+if [ "$1" -eq 0 ]; then
+    rm -f %{_bindir}/%{_poe_gen_tool_name}
 fi
 
 %changelog

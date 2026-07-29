@@ -1,0 +1,10 @@
+DeliveryName	InstallName	FileCheckSum	FileFeature	FileOwner
+<deliverydir>/external/dcap_source/tools/PcsClientTool/License.txt	<installdir>/License.txt	0	main	STP
+<deliverydir>/external/dcap_source/tools/PcsClientTool/pcsclient.py	<installdir>/pcsclient.py	0	main	STP
+<deliverydir>/external/dcap_source/tools/PcsClientTool/README.txt	<installdir>/README.txt	0	main	STP
+<deliverydir>/external/dcap_source/tools/PcsClientTool/requirements.txt	<installdir>/requirements.txt	0	main	STP
+<deliverydir>/external/dcap_source/tools/PcsClientTool/lib/__init__.py	<installdir>/lib/__init__.py	0	main	STP
+<deliverydir>/external/dcap_source/tools/PcsClientTool/lib/intelsgx/credential.py	<installdir>/lib/intelsgx/credential.py	0	main	STP
+<deliverydir>/external/dcap_source/tools/PcsClientTool/lib/intelsgx/pckcert.py	<installdir>/lib/intelsgx/pckcert.py	0	main	STP
+<deliverydir>/external/dcap_source/tools/PcsClientTool/lib/intelsgx/pcs.py	<installdir>/lib/intelsgx/pcs.py	0	main	STP
+

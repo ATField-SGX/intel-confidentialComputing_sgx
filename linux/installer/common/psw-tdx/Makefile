@@ -47,6 +47,8 @@ TDQE_FULL_VER:= $(call ACQUIRE_DCAP_VERSION,TDQE_VERSION)
 TDQE_MAJOR_VER:=$(word 1,$(subst ., ,$(TDQE_FULL_VER)))
 QVE_FULL_VER:= $(call ACQUIRE_DCAP_VERSION,QVE_VERSION)
 QVE_MAJOR_VER:=$(word 1,$(subst ., ,$(QVE_FULL_VER)))
+QAE_FULL_VER:= $(call ACQUIRE_DCAP_VERSION,QAE_VERSION)
+QAE_MAJOR_VER:=$(word 1,$(subst ., ,$(QAE_FULL_VER)))
 QPL_FULL_VER:= $(call ACQUIRE_DCAP_VERSION,DEFAULT_QPL_VERSION)
 QPL_MAJOR_VER:=$(word 1,$(subst ., ,$(QPL_FULL_VER)))
 QCNL_FULL_VER:= $(call ACQUIRE_DCAP_VERSION,DEFAULT_QPL_VERSION)
@@ -133,7 +135,8 @@ TDX_QGS_PKGS:= $(TDX_QGS_PACKAGE)
 AE_PKGS:= $(AE_IDE_PACKAGE)                  \
           $(AE_PCE_PACKAGE)                  \
           $(AE_TDQE_PACKAGE)                 \
-          $(AE_QVE_PACKAGE)
+          $(AE_QVE_PACKAGE)                  \
+          $(AE_QAE_PACKAGE)
 
 DEV_LIB_PKGS:= $(TDX_LOGIC_PACKAGE)          \
                $(TDX_LOGIC_DEV_PACKAGE)      \
@@ -235,6 +238,10 @@ install_ae: $(foreach PKG,$(AE_PKGS),post_$(PKG))
 	mv libsgx_qve.signed.so libsgx_qve.signed.so.$(QVE_FULL_VER)                                           && \
 	ln -fs libsgx_qve.signed.so.$(QVE_FULL_VER) libsgx_qve.signed.so.$(QVE_MAJOR_VER)                      && \
 	ln -fs libsgx_qve.signed.so.$(QVE_MAJOR_VER) libsgx_qve.signed.so
+	cd $(shell readlink -m $(DESTDIR)/$(AE_QAE_PACKAGE)/$(USR_LIB_PATH))                                   && \
+	mv libsgx_qae.signed.so libsgx_qae.signed.so.$(QAE_FULL_VER)                                           && \
+	ln -fs libsgx_qae.signed.so.$(QAE_FULL_VER) libsgx_qae.signed.so.$(QAE_MAJOR_VER)                      && \
+	ln -fs libsgx_qae.signed.so.$(QAE_MAJOR_VER) libsgx_qae.signed.so
 	cd $(shell readlink -m $(DESTDIR)/$(AE_IDE_PACKAGE)/$(USR_LIB_PATH))                                   && \
 	mv libsgx_id_enclave.signed.so libsgx_id_enclave.signed.so.$(IDE_FULL_VER)                             && \
 	ln -fs libsgx_id_enclave.signed.so.$(IDE_FULL_VER) libsgx_id_enclave.signed.so.$(IDE_MAJOR_VER)

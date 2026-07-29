@@ -1,0 +1,6 @@
+DeliveryName	InstallName	FileCheckSum	FileFeature	FileOwner
+<deliverydir>/external/dcap_source/tools/PoeTools/poe-gen-tool/build/bin/poe-gen-tool	<installdir>/poe-gen-tool	0	main	STP
+<deliverydir>/external/dcap_source/tools/PoeTools/poe-gen-tool/schemas/extract-output.schema.json	<installdir>/schemas/extract-output.schema.json	0	main	STP
+<deliverydir>/external/dcap_source/tools/PoeTools/poe-gen-tool/README.md	<installdir>/README.md	0	main	STP
+<deliverydir>/external/dcap_source/tools/PoeTools/License.txt	<installdir>/License.txt	0	main	STP
+

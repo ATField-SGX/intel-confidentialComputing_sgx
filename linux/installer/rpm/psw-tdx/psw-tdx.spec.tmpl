@@ -171,6 +171,7 @@ Intel(R) Software Guard Extensions Data Center Attestation Primitives Quote Veri
 %package -n sgx-dcap-pccs
 Version:       %{_dcap_version}
 Summary:       Intel(R) Software Guard Extensions PCK Caching Service
+BuildArch:     noarch
 Requires:      gcc gcc-c++ make
 
 %description -n sgx-dcap-pccs
@@ -221,6 +222,14 @@ Recommends:    libsgx-urts >= %{_psw_version} libsgx-ae-pce >= %{version}-%{rele
 
 %description -n sgx-pck-id-retrieval-tool
 Intel(R) Software Guard Extensions:this tool is used to collect the platform information to retrieve the PCK certs from PCS(Provisioning Certification Server)
+
+%package -n libsgx-ae-qae
+Version:       %{_dcap_version}
+Summary:       Intel(R) Software Guard Extensions QAE
+AutoProv:      no
+
+%description -n libsgx-ae-qae
+Intel(R) Software Guard Extensions QAE
 
 %prep
 %setup -qc
@@ -293,6 +302,7 @@ make clean
 %files -n libsgx-ra-uefi-devel -f %{_specdir}/list-libsgx-ra-uefi-devel
 %files -n sgx-ra-service -f %{_specdir}/list-sgx-ra-service
 %files -n sgx-pck-id-retrieval-tool -f %{_specdir}/list-sgx-pck-id-retrieval-tool
+%files -n libsgx-ae-qae -f %{_specdir}/list-libsgx-ae-qae
 
 %posttrans
 if [ -x %{_tdx_qgs_path}/startup.sh ]; then %{_tdx_qgs_path}/startup.sh; fi

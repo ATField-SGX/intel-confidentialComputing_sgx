@@ -21,6 +21,8 @@ QE3_FULL_VER:= $(call ACQUIRE_DCAP_VERSION,QE3_VERSION)
 QE3_MAJOR_VER:=$(word 1,$(subst ., ,$(QE3_FULL_VER)))
 QVE_FULL_VER:= $(call ACQUIRE_DCAP_VERSION,QVE_VERSION)
 QVE_MAJOR_VER:=$(word 1,$(subst ., ,$(QVE_FULL_VER)))
+QAE_FULL_VER:= $(call ACQUIRE_DCAP_VERSION,QAE_VERSION)
+QAE_MAJOR_VER:=$(word 1,$(subst ., ,$(QAE_FULL_VER)))
 PCE_LOGIC_FULL_VER:= $(call ACQUIRE_DCAP_VERSION,PCE_WRAPPER_VERSION)
 PCE_LOGIC_MAJOR_VER:=$(word 1,$(subst ., ,$(PCE_LOGIC_FULL_VER)))
 # v-- uRTS now lives in sgx-enclave-runtime; kept here only for the AESM-private
@@ -125,7 +127,8 @@ AESM_SERVICE_PKGS:= $(AESM_PCE_PACKAGE)      \
 AE_PKGS:= $(AE_IDE_PACKAGE)                  \
           $(AE_PCE_PACKAGE)                  \
           $(AE_QE3_PACKAGE)                  \
-          $(AE_QVE_PACKAGE)
+          $(AE_QVE_PACKAGE)                  \
+          $(AE_QAE_PACKAGE)
 
 DEV_LIB_PKGS:= $(QUOTE_EX_PACKAGE)           \
                $(QUOTE_EX_DEV_PACKAGE)       \
@@ -143,9 +146,14 @@ DEV_LIB_PKGS:= $(QUOTE_EX_PACKAGE)           \
 
 ALL_PKGS:= $(AESM_SERVICE_PKGS) $(AE_PKGS) $(DEV_LIB_PKGS)
 
+AUX_TOOL_PKGS:= $(TEE_APPRAISAL_TOOL_PACKAGE) \
+                $(PCS_CLIENT_TOOL_PACKAGE)    \
+                $(PCCS_ADMIN_TOOL_PACKAGE)    \
+                $(POE_GEN_TOOL_PACKAGE)
+
 $(foreach PKG,$(AESM_SERVICE_PKGS) $(AE_PKGS),$(eval $(call INSTALL_AESM_SERVICE_TEMPLATE,$(PKG))))
 $(foreach PKG,$(DEV_LIB_PKGS),$(eval $(call INSTALL_DEV_LIB_TEMPLATE,$(PKG))))
-$(foreach PKG,$(AESM_SERVICE_PKGS) $(AE_PKGS) $(DEV_LIB_PKGS) $(DCAP_PCCS_PACKAGE) $(RA_SERVICE_PACKAGE) $(PCK_ID_RETRIEVAL_TOOL_PACKAGE),$(eval $(call PRE_INSTALL_TEMPLATE,$(PKG))))
+$(foreach PKG,$(AESM_SERVICE_PKGS) $(AE_PKGS) $(DEV_LIB_PKGS) $(DCAP_PCCS_PACKAGE) $(RA_SERVICE_PACKAGE) $(PCK_ID_RETRIEVAL_TOOL_PACKAGE) $(AUX_TOOL_PKGS),$(eval $(call PRE_INSTALL_TEMPLATE,$(PKG))))
 
 # Enclave runtime libraries and developer headers are delegated to sgx-enclave-runtime
 PHONY+=install_enclave_runtime
@@ -231,6 +239,10 @@ install_ae: $(foreach PKG,$(AE_PKGS),post_$(PKG))
 	mv libsgx_qve.signed.so libsgx_qve.signed.so.$(QVE_FULL_VER)                                           && \
 	ln -fs libsgx_qve.signed.so.$(QVE_FULL_VER) libsgx_qve.signed.so.$(QVE_MAJOR_VER)                      && \
 	ln -fs libsgx_qve.signed.so.$(QVE_MAJOR_VER) libsgx_qve.signed.so
+	cd $(shell readlink -m $(DESTDIR)/$(AE_QAE_PACKAGE)/$(USR_LIB_PATH))                                   && \
+	mv libsgx_qae.signed.so libsgx_qae.signed.so.$(QAE_FULL_VER)                                           && \
+	ln -fs libsgx_qae.signed.so.$(QAE_FULL_VER) libsgx_qae.signed.so.$(QAE_MAJOR_VER)                      && \
+	ln -fs libsgx_qae.signed.so.$(QAE_MAJOR_VER) libsgx_qae.signed.so
 	cd $(shell readlink -m $(DESTDIR)/$(AE_IDE_PACKAGE)/$(USR_LIB_PATH))                                   && \
 	mv libsgx_id_enclave.signed.so libsgx_id_enclave.signed.so.$(IDE_FULL_VER)                             && \
 	ln -fs libsgx_id_enclave.signed.so.$(IDE_FULL_VER) libsgx_id_enclave.signed.so.$(IDE_MAJOR_VER)
@@ -280,11 +292,35 @@ install_dev_lib: install_enclave_runtime_dev $(foreach PKG,$(DEV_LIB_PKGS),post_
 	cd $(shell readlink -m $(DESTDIR)/$(RA_UEFI_DEV_PACKAGE)/$(USR_LIB_PATH)) && \
 	ln -fs libmpa_uefi.so.$(RAU_MAJOR_VER) libmpa_uefi.so
 
+PHONY+=install_$(TEE_APPRAISAL_TOOL_PACKAGE)
+install_$(TEE_APPRAISAL_TOOL_PACKAGE): pre_$(TEE_APPRAISAL_TOOL_PACKAGE) | $(PACKAGE_ROOT_PATH)
+	install -d $(shell readlink -m $(DESTDIR)/$(TEE_APPRAISAL_TOOL_PACKAGE)/usr/$(BIN_DIR))
+	install $|/$(TEE_APPRAISAL_TOOL_PACKAGE)/$(BIN_DIR)/* $(DESTDIR)/$(TEE_APPRAISAL_TOOL_PACKAGE)/usr/$(BIN_DIR)
+
+PHONY+=install_$(PCS_CLIENT_TOOL_PACKAGE)
+install_$(PCS_CLIENT_TOOL_PACKAGE): pre_$(PCS_CLIENT_TOOL_PACKAGE) | $(PACKAGE_ROOT_PATH)
+	install -d $(shell readlink -m $(DESTDIR)/$(PCS_CLIENT_TOOL_PACKAGE)/$(SGX_INSTALL_PATH)/$(PCS_CLIENT_TOOL_INSTALL_DIR))
+	cp -fr $|/$(PCS_CLIENT_TOOL_PACKAGE)/* $(DESTDIR)/$(PCS_CLIENT_TOOL_PACKAGE)/$(SGX_INSTALL_PATH)/$(PCS_CLIENT_TOOL_INSTALL_DIR)
+
+PHONY+=install_$(PCCS_ADMIN_TOOL_PACKAGE)
+install_$(PCCS_ADMIN_TOOL_PACKAGE): pre_$(PCCS_ADMIN_TOOL_PACKAGE) | $(PACKAGE_ROOT_PATH)
+	install -d $(shell readlink -m $(DESTDIR)/$(PCCS_ADMIN_TOOL_PACKAGE)/$(SGX_INSTALL_PATH)/$(PCCS_ADMIN_TOOL_INSTALL_DIR))
+	cp -fr $|/$(PCCS_ADMIN_TOOL_PACKAGE)/* $(DESTDIR)/$(PCCS_ADMIN_TOOL_PACKAGE)/$(SGX_INSTALL_PATH)/$(PCCS_ADMIN_TOOL_INSTALL_DIR)
+
+PHONY+=install_$(POE_GEN_TOOL_PACKAGE)
+install_$(POE_GEN_TOOL_PACKAGE): pre_$(POE_GEN_TOOL_PACKAGE) | $(PACKAGE_ROOT_PATH)
+	install -d $(shell readlink -m $(DESTDIR)/$(POE_GEN_TOOL_PACKAGE)/$(SGX_INSTALL_PATH)/$(POE_GEN_TOOL_INSTALL_DIR))
+	cp -fr $|/$(POE_GEN_TOOL_PACKAGE)/* $(DESTDIR)/$(POE_GEN_TOOL_PACKAGE)/$(SGX_INSTALL_PATH)/$(POE_GEN_TOOL_INSTALL_DIR)
+
 PHONY+=install
 install: install_$(AESM_SERVICE_PACKAGE)         \
 	install_$(DCAP_PCCS_PACKAGE)             \
 	install_$(RA_SERVICE_PACKAGE)            \
 	install_$(PCK_ID_RETRIEVAL_TOOL_PACKAGE) \
+	install_$(TEE_APPRAISAL_TOOL_PACKAGE)    \
+	install_$(PCS_CLIENT_TOOL_PACKAGE)       \
+	install_$(PCCS_ADMIN_TOOL_PACKAGE)       \
+	install_$(POE_GEN_TOOL_PACKAGE)          \
 	install_ae                               \
 	install_enclave_runtime                  \
 	install_dev_lib

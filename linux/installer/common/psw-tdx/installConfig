@@ -3,6 +3,7 @@ TDX_QGS_PACKAGE=tdx-qgs
 AE_IDE_PACKAGE=libsgx-ae-id-enclave
 AE_TDQE_PACKAGE=libsgx-ae-tdqe
 AE_QVE_PACKAGE=libsgx-ae-qve
+AE_QAE_PACKAGE=libsgx-ae-qae
 TDX_LOGIC_PACKAGE=libsgx-tdx-logic
 TDX_LOGIC_DEV_PACKAGE=libsgx-tdx-logic-devel
 PCE_LOGIC_PACKAGE=libsgx-pce-logic

@@ -1,0 +1,3 @@
+DeliveryName	InstallName	FileCheckSum	FileFeature	FileOwner
+<deliverydir>/external/dcap_source/QuoteGeneration/build/linux/tee_appraisal_tool	<installdir>/bin/tee_appraisal_tool	0	main	STP
+

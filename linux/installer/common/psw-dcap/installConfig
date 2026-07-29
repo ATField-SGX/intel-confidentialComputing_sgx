@@ -10,6 +10,7 @@ AESM_SERVICE_PACKAGE=sgx-aesm-service
 AE_IDE_PACKAGE=libsgx-ae-id-enclave
 AE_QE3_PACKAGE=libsgx-ae-qe3
 AE_QVE_PACKAGE=libsgx-ae-qve
+AE_QAE_PACKAGE=libsgx-ae-qae
 QE3_LOGIC_PACKAGE=libsgx-qe3-logic
 PCE_LOGIC_PACKAGE=libsgx-pce-logic
 DCAP_QPL_PACKAGE=libsgx-dcap-default-qpl
@@ -27,8 +28,17 @@ RA_UEFI_PACKAGE=libsgx-ra-uefi
 RA_UEFI_DEV_PACKAGE=libsgx-ra-uefi-devel
 RA_SERVICE_PACKAGE=sgx-ra-service
 
+TEE_APPRAISAL_TOOL_PACKAGE=tee-appraisal-tool
+PCS_CLIENT_TOOL_PACKAGE=intel-tee-pcs-client-tool
+PCS_CLIENT_TOOL_INSTALL_DIR=pcs-client-tool
+PCCS_ADMIN_TOOL_PACKAGE=intel-tee-pccs-admin-tool
+PCCS_ADMIN_TOOL_INSTALL_DIR=pccs-admin-tool
+POE_GEN_TOOL_PACKAGE=intel-tee-poe-gen-tool
+POE_GEN_TOOL_INSTALL_DIR=intel-tee-poe-gen-tool
+
 SGX_INSTALL_PATH=/opt/intel
 
 INC_DIR=include
 LIB_DIR=lib
 ETC_DIR=etc
+BIN_DIR=bin
