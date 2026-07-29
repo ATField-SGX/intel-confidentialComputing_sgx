@@ -249,10 +249,17 @@ deb_pcs_client_tool:
 	$(MAKE) -C external/dcap_source/tools/PcsClientTool deb_sgx_pcs_client_pkg
 	$(CP) external/dcap_source/tools/PcsClientTool/installer/linux/deb/*pcs-client-tool/*pcs-client-tool*deb ./linux/installer/deb/
 
-.PHONY: deb_tee_poe_gen_tool
-deb_tee_poe_gen_tool:
+.PHONY: deb_tee_poe_tools
+ifeq ($(DISTR_ID)$(DISTR_VER),debian10)
+deb_tee_poe_tools:
+	echo "Skip POE tools in debian 10"
+else
+deb_tee_poe_tools:
 	$(MAKE) -C external/dcap_source PoeTools_deb
 	$(CP) external/dcap_source/tools/PoeTools/build_infrastructure/installer/linux/deb/intel-tee-poe-gen-tool/intel-tee-poe-gen-tool*.deb ./linux/installer/deb/
+	$(CP) external/dcap_source/tools/PoeTools/build_infrastructure/installer/linux/deb/intel-tee-poe-eval-tool/intel-tee-poe-eval-tool*.deb ./linux/installer/deb/
+	$(CP) external/dcap_source/tools/PoeTools/build_infrastructure/installer/linux/deb/intel-dcap-poe/libintel-dcap-poe-dev*.deb ./linux/installer/deb/
+endif
 
 # Removed: libsgx-enclave-common, libsgx-urts and libsgx-headers are now produced
 # SDK-side (enclave_runtime + the SDK headers package). These error stubs redirect
@@ -333,7 +340,7 @@ deb_psw_pkg: deb_psw_aesm_pkg \
              deb_sgx_ra_service_pkg \
              deb_tee_appraisal_tool \
              deb_pcs_client_tool \
-             deb_tee_poe_gen_tool
+             deb_tee_poe_tools
 
 .PHONY: deb_sgx_sdk_pkg
 deb_sgx_sdk_pkg:
@@ -473,10 +480,20 @@ rpm_pcs_client_tool:
 	$(MAKE) -C external/dcap_source/tools/PcsClientTool rpm_sgx_pcs_client_pkg
 	$(CP) external/dcap_source/tools/PcsClientTool/installer/linux/rpm/*pcs-client-tool/*pcs-client-tool*rpm ./linux/installer/rpm/
 
-.PHONY: rpm_tee_poe_gen_tool
-rpm_tee_poe_gen_tool:
+.PHONY: rpm_tee_poe_tools
+# Both SLES 15 SP6 (ID=sles) and openSUSE Leap 15.6 (ID=opensuse-leap) ship
+# gcc8 as the default toolchain, which cannot build POE tools (requires
+# GCC >= 11.1), so both are matched here.
+ifneq (,$(filter $(DISTR_ID)$(DISTR_VER),sles15.6 opensuse-leap15.6))
+rpm_tee_poe_tools:
+	echo "Skip POE tools on SLES/openSUSE Leap 15.6 (gcc8 default toolchain)"
+else
+rpm_tee_poe_tools:
 	$(MAKE) -C external/dcap_source PoeTools_rpm
 	$(CP) external/dcap_source/tools/PoeTools/build_infrastructure/installer/linux/rpm/intel-tee-poe-gen-tool/intel-tee-poe-gen-tool*.rpm ./linux/installer/rpm/
+	$(CP) external/dcap_source/tools/PoeTools/build_infrastructure/installer/linux/rpm/intel-tee-poe-eval-tool/intel-tee-poe-eval-tool*.rpm ./linux/installer/rpm/
+	$(CP) external/dcap_source/tools/PoeTools/build_infrastructure/installer/linux/rpm/intel-dcap-poe/libintel-dcap-poe-devel*.rpm ./linux/installer/rpm/
+endif
 
 # Removed: libsgx-enclave-common, libsgx-urts and libsgx-headers are now produced
 # SDK-side (enclave_runtime + the SDK headers package). These error stubs redirect
@@ -542,7 +559,7 @@ _rpm_dcap_tdx__sgx_based_quoting_support_pkg: rpm_tdx_qgs \
 
 # Full local DCAP/PSW package set (RPM). See deb_psw_pkg: composed from the three
 # quoting aggregates plus the auxiliary packages no aggregate pulls in (PCCS + admin tool,
-# PCK ID retrieval, platform registration, appraisal tool, PCS client, POE gen).
+# PCK ID retrieval, platform registration, appraisal tool, PCS client, POE tools).
 .PHONY: rpm_psw_pkg
 rpm_psw_pkg: rpm_psw_aesm_pkg \
              _rpm_dcap_sgx_quoting_support_pkg \
@@ -553,7 +570,7 @@ rpm_psw_pkg: rpm_psw_aesm_pkg \
              rpm_sgx_ra_service_pkg \
              rpm_tee_appraisal_tool \
              rpm_pcs_client_tool \
-             rpm_tee_poe_gen_tool
+             rpm_tee_poe_tools
 
 .PHONY: rpm_sgx_sdk_pkg
 rpm_sgx_sdk_pkg:
