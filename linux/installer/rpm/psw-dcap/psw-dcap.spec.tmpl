@@ -44,8 +44,8 @@
 %define _pccs_admin_venv_dir %{_pccs_admin_path}/.venv
 %define _pccs_admin_main_script pccsadmin.py
 %define _pccs_admin_wrapper pccs-admin-tool
-%define _poe_gen_path /opt/intel/intel-tee-poe-gen-tool
-%define _poe_gen_tool_name poe-gen-tool
+%define _poe_gen_path /opt/intel/poe-gen-tool
+%define _poe_eval_path /opt/intel/poe-eval-tool
 
 Name:           sgx-aesm-service
 Version:        %{_psw_version}
@@ -320,9 +320,30 @@ Intel(R) Provisioning Certificate Caching Service (PCCS) Admin Tool
 Version:       %{_dcap_version}
 Provides:      poe-gen-tool
 Summary:       Intel(R) Platform Ownership Endorsement(POE) Tool
+Recommends:    intel-tee-poe-eval-tool
 
 %description -n intel-tee-poe-gen-tool
 This tool is used to collect the platform instance ID, then to generate the platform ownership endorsement
+
+%package -n intel-tee-poe-eval-tool
+Version:       %{_dcap_version}
+Provides:      poe-eval-tool
+Summary:       Intel(R) Platform Ownership Endorsement(POE) Evaluator Tool
+Recommends:    intel-tee-poe-gen-tool
+
+%description -n intel-tee-poe-eval-tool
+This tool evaluates a signed platform ownership endorsement and identifies the
+endorsed platform owner.
+
+%package -n libintel-dcap-poe-devel
+Version:       %{_dcap_version}
+Summary:       Intel(R) DCAP Platform Ownership Endorsement(POE) C++ library (development)
+Requires:      openssl-devel
+
+%description -n libintel-dcap-poe-devel
+Development files for the Intel(R) DCAP Platform Ownership Endorsement C++
+evaluation library: static archive, public header, pkg-config file and CMake
+package configuration exposing the libintel-dcap-poe::cxx imported target.
 
 %prep
 %setup -qc
@@ -333,6 +354,14 @@ make %{?_smp_mflags} build
 
 %install
 make DESTDIR=%{?buildroot} install
+
+poe_pc="%{?buildroot}/libintel-dcap-poe-devel%{_libdir}/pkgconfig/libintel-dcap-poe-cxx.pc"
+test -f "$poe_pc" || exit 1
+sed -i \
+    -e 's#^prefix=.*#prefix=%{_prefix}#' \
+    -e 's#^libdir=.*#libdir=%{_libdir}#' \
+    -e 's#^includedir=.*#includedir=%{_includedir}#' \
+    "$poe_pc"
 
 for pkg in $(ls -A %{?buildroot} 2> /dev/null |grep -v "license"); do
     # Runtime libraries are owned by the sgx-enclave-runtime package now;
@@ -357,11 +386,12 @@ for pkg in $(ls -A %{?buildroot} 2> /dev/null |grep -v "license"); do
     grep -v "^%{_pcs_client_path}" | \
     grep -v "^%{_pccs_admin_path}" | \
     grep -v "^%{_poe_gen_path}" | \
+    grep -v "^%{_poe_eval_path}" | \
     sed -e "s#^#%dir #" > %{_specdir}/list-${pkg}
     for f in $(find %{?buildroot}/${pkg}); do
         if [ -d ${f} ]; then
             echo ${f} | sed -e "s#^%{?buildroot}/${pkg}##" | \
-            grep -E "^%{_aesm_service_path}|^%{_dcap_pccs_path}|^%{_ra_service_path}|^%{_pck_id_retrieval_tool_path}|^%{_pcs_client_path}|^%{_pccs_admin_path}|^%{_poe_gen_path}" | \
+            grep -E "^%{_aesm_service_path}|^%{_dcap_pccs_path}|^%{_ra_service_path}|^%{_pck_id_retrieval_tool_path}|^%{_pcs_client_path}|^%{_pccs_admin_path}|^%{_poe_gen_path}|^%{_poe_eval_path}" | \
             sed -e "s#^#%dir #" >> %{_specdir}/list-${pkg}
         else
             echo ${f} | \
@@ -371,6 +401,7 @@ for pkg in $(ls -A %{?buildroot} 2> /dev/null |grep -v "license"); do
     cp -r %{?buildroot}/${pkg}/* %{?buildroot}/
     rm -fr %{?buildroot}/${pkg}
     sed -i -e 's:^/etc/.*\.conf:%config &:' \
+           -e 's:^/etc/.*\.cfg:%config &:' \
            -e 's:^%{_dcap_pccs_path}/config/default\.json:%config &:' %{_specdir}/list-${pkg}
 done
 rm -fr %{?buildroot}/license
@@ -379,7 +410,8 @@ echo "%%ghost %{_pcs_client_path}/%{_pcs_client_wrapper}" >> %{_specdir}/list-in
 echo "%%ghost %{_bindir}/%{_pcs_client_wrapper}"          >> %{_specdir}/list-intel-tee-pcs-client-tool
 echo "%%ghost %{_pccs_admin_path}/%{_pccs_admin_wrapper}" >> %{_specdir}/list-intel-tee-pccs-admin-tool
 echo "%%ghost %{_bindir}/%{_pccs_admin_wrapper}"          >> %{_specdir}/list-intel-tee-pccs-admin-tool
-echo "%%ghost %{_bindir}/%{_poe_gen_tool_name}"           >> %{_specdir}/list-intel-tee-poe-gen-tool
+echo "%%ghost %{_bindir}/poe-gen-tool"                    >> %{_specdir}/list-intel-tee-poe-gen-tool
+echo "%%ghost %{_bindir}/poe-eval-tool"                   >> %{_specdir}/list-intel-tee-poe-eval-tool
 
 %clean
 make clean
@@ -415,6 +447,8 @@ make clean
 %files -n intel-tee-pcs-client-tool -f %{_specdir}/list-intel-tee-pcs-client-tool
 %files -n intel-tee-pccs-admin-tool -f %{_specdir}/list-intel-tee-pccs-admin-tool
 %files -n intel-tee-poe-gen-tool -f %{_specdir}/list-intel-tee-poe-gen-tool
+%files -n intel-tee-poe-eval-tool -f %{_specdir}/list-intel-tee-poe-eval-tool
+%files -n libintel-dcap-poe-devel -f %{_specdir}/list-libintel-dcap-poe-devel
 
 %posttrans
 if [ -x %{_aesm_service_path}/startup.sh ]; then %{_aesm_service_path}/startup.sh; fi
@@ -550,19 +584,39 @@ rm -f "%{_pccs_admin_path}/%{_pccs_admin_wrapper}"
 rm -f "%{_bindir}/%{_pccs_admin_wrapper}"
 
 %posttrans -n intel-tee-poe-gen-tool
-if [ ! -f %{_poe_gen_path}/%{_poe_gen_tool_name} ]; then
-    echo "ERROR: %{_poe_gen_path}/%{_poe_gen_tool_name} not found." >&2
+if [ ! -f "%{_poe_gen_path}/poe-gen-tool" ]; then
+    echo "ERROR: %{_poe_gen_path}/poe-gen-tool not found." >&2
     exit 6
 fi
-if [ -e "%{_bindir}/%{_poe_gen_tool_name}" ] && [ ! -L "%{_bindir}/%{_poe_gen_tool_name}" ]; then
-    echo "ERROR: %{_bindir}/%{_poe_gen_tool_name} exists and is not a symlink; refusing to overwrite." >&2
-    exit 1
+ln -s -f "%{_poe_gen_path}/poe-gen-tool" "%{_bindir}/poe-gen-tool"
+retval=$?
+if test $retval -ne 0; then
+    echo "ERROR: failed to create symlink for poe-gen-tool." >&2
+    exit 6
 fi
-ln -s -f %{_poe_gen_path}/%{_poe_gen_tool_name} %{_bindir}/%{_poe_gen_tool_name}
 
 %postun -n intel-tee-poe-gen-tool
+# Only perform cleanup on package erase (arg 0), not on upgrade
 if [ "$1" -eq 0 ]; then
-    rm -f %{_bindir}/%{_poe_gen_tool_name}
+    rm -f "%{_bindir}/poe-gen-tool"
+fi
+
+%posttrans -n intel-tee-poe-eval-tool
+if [ ! -f "%{_poe_eval_path}/poe-eval-tool" ]; then
+    echo "ERROR: %{_poe_eval_path}/poe-eval-tool not found." >&2
+    exit 6
+fi
+ln -s -f "%{_poe_eval_path}/poe-eval-tool" "%{_bindir}/poe-eval-tool"
+retval=$?
+if test $retval -ne 0; then
+    echo "ERROR: failed to create symlink for poe-eval-tool." >&2
+    exit 6
+fi
+
+%postun -n intel-tee-poe-eval-tool
+# Only perform cleanup on package erase (arg 0), not on upgrade
+if [ "$1" -eq 0 ]; then
+    rm -f "%{_bindir}/poe-eval-tool"
 fi
 
 %changelog

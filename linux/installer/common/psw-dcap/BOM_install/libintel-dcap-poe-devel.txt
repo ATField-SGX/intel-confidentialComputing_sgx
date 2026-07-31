@@ -1,0 +1,6 @@
+DeliveryName	InstallName	FileCheckSum	FileFeature	FileOwner
+<deliverydir>/external/dcap_source/tools/PoeTools/build/Release/poe-eval-lib/libintel_dcap_poe_cxx.a	<installdir>/lib/libintel_dcap_poe_cxx.a	0	main	STP
+<deliverydir>/external/dcap_source/tools/PoeTools/poe-eval-lib/src/inc/intel_dcap_poe.hpp	<installdir>/include/libintel-dcap-poe/intel_dcap_poe.hpp	0	main	STP
+<deliverydir>/external/dcap_source/tools/PoeTools/build/Release/poe-eval-lib/libintel-dcap-poe-cxx.pc	<installdir>/lib/pkgconfig/libintel-dcap-poe-cxx.pc	0	main	STP
+<deliverydir>/external/dcap_source/tools/PoeTools/build/Release/poe-eval-lib/libintel-dcap-poeConfig.cmake	<installdir>/lib/cmake/libintel-dcap-poe/libintel-dcap-poeConfig.cmake	0	main	STP
+<deliverydir>/external/dcap_source/tools/PoeTools/build/Release/poe-eval-lib/libintel-dcap-poeConfigVersion.cmake	<installdir>/lib/cmake/libintel-dcap-poe/libintel-dcap-poeConfigVersion.cmake	0	main	STP

@@ -1,0 +1,6 @@
+DeliveryName	InstallName	FileCheckSum	FileFeature	FileOwner
+<deliverydir>/external/dcap_source/tools/PoeTools/build/Release/bin/poe-eval-tool	<installdir>/poe-eval-tool	0	main	STP
+<deliverydir>/external/dcap_source/tools/PoeTools/poe-eval-tool/schemas/poe-eval-id-owner.schema.json	<installdir>/schemas/poe-eval-id-owner.schema.json	0	main	STP
+<deliverydir>/external/dcap_source/tools/PoeTools/poe-eval-tool/poe-eval-tool.cfg.sample	<installdir>/poe-eval-tool.cfg.sample	0	main	STP
+<deliverydir>/external/dcap_source/tools/PoeTools/poe-eval-tool/README.md	<installdir>/README.md	0	main	STP
+<deliverydir>/external/dcap_source/tools/PoeTools/License.txt	<installdir>/License.txt	0	main	STP

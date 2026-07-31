@@ -102,10 +102,29 @@ endef
 define INSTALL_DEV_LIB_TEMPLATE
 $(1): pre_$(1) | $(PACKAGE_ROOT_PATH)
 	install -d $$(shell readlink -m $(DESTDIR)/$$@)
-	test $(call TEST_COPYABLE,$$|/$$@/$(LIB_DIR)) && (                 \
-	install -d $$(shell readlink -m $(DESTDIR)/$$@/$(USR_LIB_PATH)) && \
-	install $$|/$$@/$(LIB_DIR)/*.so $(DESTDIR)/$$@/$(USR_LIB_PATH)  && \
-	rm -fr $$|/$$@/$(LIB_DIR) ) ||:
+	if test $(call TEST_COPYABLE,$$|/$$@/$(LIB_DIR)); then \
+		lib_source="$$|/$$@/$(LIB_DIR)"; \
+		lib_dest="$(DESTDIR)/$$@/$(USR_LIB_PATH)"; \
+		set -e; \
+		install -d "$$$$lib_dest"; \
+		for pattern in '*.so' '*.a'; do \
+			for file in "$$$$lib_source"/$$$$pattern; do \
+				if test -e "$$$$file"; then \
+					case "$$$$file" in \
+						*.a) install -m 0644 "$$$$file" "$$$$lib_dest" ;; \
+						*.so) install -m 0755 "$$$$file" "$$$$lib_dest" ;; \
+					esac; \
+				fi; \
+			done; \
+		done; \
+		for directory in pkgconfig cmake; do \
+			if test -d "$$$$lib_source/$$$$directory"; then \
+				install -d "$$$$lib_dest/$$$$directory"; \
+				cp -fr "$$$$lib_source/$$$$directory"/. "$$$$lib_dest/$$$$directory"/; \
+			fi; \
+		done; \
+		rm -fr "$$$$lib_source"; \
+	fi
 	test $(call TEST_COPYABLE,$$|/$$@/$(INC_DIR)) && (                 \
 	install -d $$(shell readlink -m $(DESTDIR)/$$@/$(USR_INC_PATH)) && \
 	install -d $$(shell readlink -m $(DESTDIR)/$$@/$(USR_LIB_PATH)) && \
@@ -142,14 +161,16 @@ DEV_LIB_PKGS:= $(QUOTE_EX_PACKAGE)           \
                $(RA_NETWORK_PACKAGE)         \
                $(RA_NETWORK_DEV_PACKAGE)     \
                $(RA_UEFI_PACKAGE)            \
-               $(RA_UEFI_DEV_PACKAGE)
+               $(RA_UEFI_DEV_PACKAGE)        \
+               $(POE_LIB_PACKAGE)
 
 ALL_PKGS:= $(AESM_SERVICE_PKGS) $(AE_PKGS) $(DEV_LIB_PKGS)
 
 AUX_TOOL_PKGS:= $(TEE_APPRAISAL_TOOL_PACKAGE) \
                 $(PCS_CLIENT_TOOL_PACKAGE)    \
                 $(PCCS_ADMIN_TOOL_PACKAGE)    \
-                $(POE_GEN_TOOL_PACKAGE)
+                $(POE_GEN_TOOL_PACKAGE)       \
+                $(POE_EVAL_TOOL_PACKAGE)
 
 $(foreach PKG,$(AESM_SERVICE_PKGS) $(AE_PKGS),$(eval $(call INSTALL_AESM_SERVICE_TEMPLATE,$(PKG))))
 $(foreach PKG,$(DEV_LIB_PKGS),$(eval $(call INSTALL_DEV_LIB_TEMPLATE,$(PKG))))
@@ -309,8 +330,27 @@ install_$(PCCS_ADMIN_TOOL_PACKAGE): pre_$(PCCS_ADMIN_TOOL_PACKAGE) | $(PACKAGE_R
 
 PHONY+=install_$(POE_GEN_TOOL_PACKAGE)
 install_$(POE_GEN_TOOL_PACKAGE): pre_$(POE_GEN_TOOL_PACKAGE) | $(PACKAGE_ROOT_PATH)
-	install -d $(shell readlink -m $(DESTDIR)/$(POE_GEN_TOOL_PACKAGE)/$(SGX_INSTALL_PATH)/$(POE_GEN_TOOL_INSTALL_DIR))
-	cp -fr $|/$(POE_GEN_TOOL_PACKAGE)/* $(DESTDIR)/$(POE_GEN_TOOL_PACKAGE)/$(SGX_INSTALL_PATH)/$(POE_GEN_TOOL_INSTALL_DIR)
+	poe_source="$|/$(POE_GEN_TOOL_PACKAGE)"; \
+	poe_dest="$(DESTDIR)/$(POE_GEN_TOOL_PACKAGE)"; \
+	poe_install_path="$$poe_dest$(SGX_INSTALL_PATH)/$(POE_GEN_TOOL_INSTALL_DIR)"; \
+	poe_config_path="$$poe_dest/$(ETC_DIR)/opt/intel/$(POE_GEN_TOOL_PACKAGE)"; \
+	install -d "$$poe_install_path"; \
+	cp -fr "$$poe_source"/* "$$poe_install_path"; \
+	install -d "$$poe_config_path"; \
+	install -m 644 "$$poe_source/poe-gen-tool.cfg.sample" \
+		"$$poe_config_path/poe-gen-tool.cfg"
+
+PHONY+=install_$(POE_EVAL_TOOL_PACKAGE)
+install_$(POE_EVAL_TOOL_PACKAGE): pre_$(POE_EVAL_TOOL_PACKAGE) | $(PACKAGE_ROOT_PATH)
+	poe_source="$|/$(POE_EVAL_TOOL_PACKAGE)"; \
+	poe_dest="$(DESTDIR)/$(POE_EVAL_TOOL_PACKAGE)"; \
+	poe_install_path="$$poe_dest$(SGX_INSTALL_PATH)/$(POE_EVAL_TOOL_INSTALL_DIR)"; \
+	poe_config_path="$$poe_dest/$(ETC_DIR)/opt/intel/$(POE_EVAL_TOOL_PACKAGE)"; \
+	install -d "$$poe_install_path"; \
+	cp -fr "$$poe_source"/* "$$poe_install_path"; \
+	install -d "$$poe_config_path"; \
+	install -m 644 "$$poe_source/poe-eval-tool.cfg.sample" \
+		"$$poe_config_path/poe-eval-tool.cfg"
 
 PHONY+=install
 install: install_$(AESM_SERVICE_PACKAGE)         \
@@ -321,6 +361,7 @@ install: install_$(AESM_SERVICE_PACKAGE)         \
 	install_$(PCS_CLIENT_TOOL_PACKAGE)       \
 	install_$(PCCS_ADMIN_TOOL_PACKAGE)       \
 	install_$(POE_GEN_TOOL_PACKAGE)          \
+	install_$(POE_EVAL_TOOL_PACKAGE)         \
 	install_ae                               \
 	install_enclave_runtime                  \
 	install_dev_lib

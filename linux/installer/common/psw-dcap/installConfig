@@ -20,6 +20,7 @@ DCAP_QL_DEV_PACKAGE=libsgx-dcap-ql-devel
 DCAP_QVL_PACKAGE=libsgx-dcap-quote-verify
 DCAP_QVL_DEV_PACKAGE=libsgx-dcap-quote-verify-devel
 DCAP_PCCS_PACKAGE=sgx-dcap-pccs
+POE_LIB_PACKAGE=libintel-dcap-poe-devel
 
 PCK_ID_RETRIEVAL_TOOL_PACKAGE=sgx-pck-id-retrieval-tool
 RA_NETWORK_PACKAGE=libsgx-ra-network
@@ -34,7 +35,9 @@ PCS_CLIENT_TOOL_INSTALL_DIR=pcs-client-tool
 PCCS_ADMIN_TOOL_PACKAGE=intel-tee-pccs-admin-tool
 PCCS_ADMIN_TOOL_INSTALL_DIR=pccs-admin-tool
 POE_GEN_TOOL_PACKAGE=intel-tee-poe-gen-tool
-POE_GEN_TOOL_INSTALL_DIR=intel-tee-poe-gen-tool
+POE_GEN_TOOL_INSTALL_DIR=poe-gen-tool
+POE_EVAL_TOOL_PACKAGE=intel-tee-poe-eval-tool
+POE_EVAL_TOOL_INSTALL_DIR=poe-eval-tool
 
 SGX_INSTALL_PATH=/opt/intel
 
