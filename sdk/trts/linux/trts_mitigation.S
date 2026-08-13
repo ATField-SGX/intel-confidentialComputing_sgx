@@ -349,6 +349,11 @@ DECLARE_LOCAL_FUNC constant_time_apply_sgxstep_mitigation_and_continue_execution
     mov     RSVD_REDZONE_WORD_OFFSET(%rsp), %rsi
     lfence
 
+# Preserve the stack-page selector in bit 1 of the code tickle parameter.
+# The code page is page-aligned and only bits 0 and 4 are otherwise used.
+    movzx   %dil, %eax
+    lea     (%rcx,%rax,2), %rcx
+
 # Set up the stack tickles
     movzx   %dil, %edx # Bit 0 in %rdi indicates whether a second stack page can be tickled
     mov     $0, %dil
@@ -372,9 +377,65 @@ DECLARE_LOCAL_FUNC constant_time_apply_sgxstep_mitigation_and_continue_execution
 
 .ct_check_execute:
     call    *%rbp
-
 .ct_check_execute_post:
+
+# Preserve the encoded code-page parameter while the TLBlur loops use RBP.
+    mov     %rax, %rbp
+
+# Prefetch TLBlur writable entries.  The loop count is fixed at enable time;
+# unused entries contain the current stack page and are therefore harmless.
+    lea     g_tlblur_prefetch_w(%rip), %rdx
+    mov     g_tlblur_pws_w_size(%rip), %rcx
+.ct_prefetch_tlblur_w:
+    jrcxz   .ct_prefetch_tlblur_x
+    mov     -8(%rdx, %rcx, 8), %rax
+    movb    (%rax), %sil
+    movb    %sil, (%rax)
+    lea     -1(%rcx), %rcx
+    jmp     .ct_prefetch_tlblur_w
+
+# Prefetch TLBlur executable entries.
+.ct_prefetch_tlblur_x:
+    lea     g_tlblur_prefetch_x(%rip), %rdx
+    mov     g_tlblur_pws_x_size(%rip), %rcx
+.ct_prefetch_tlblur_x_loop:
+    jrcxz   .ct_prefetch_tlblur_r
+    mov     -8(%rdx, %rcx, 8), %rax
+    call    *%rax
+    lea     -1(%rcx), %rcx
+    jmp     .ct_prefetch_tlblur_x_loop
+
+# Prefetch TLBlur readable entries.
+.ct_prefetch_tlblur_r:
+    lea     g_tlblur_prefetch_r(%rip), %rdx
+    mov     g_tlblur_pws_r_size(%rip), %rcx
+.ct_prefetch_tlblur_r_loop:
+    jrcxz   .ct_restore_tlblur_state
+    mov     -8(%rdx, %rcx, 8), %rax
+    mov     (%rax), %rax
+    lea     -1(%rcx), %rcx
+    jmp     .ct_prefetch_tlblur_r_loop
+
+.ct_restore_tlblur_state:
+# Recover the second stack page and the code page after the TLBlur loops.
+    mov     $2, %ecx
+    shrx    %rcx, %rbp, %rax
+    shlx    %rcx, %rax, %rax
+    mov     $63, %ecx
+    shlx    %rcx, %rbp, %rsi
+    shrx    %rcx, %rsi, %rsi
+    lea     (%rax,%rsi), %rax
+
+    mov     $1, %ecx
+    shrx    %rcx, %rbp, %rdx
+    mov     $63, %ecx
+    shlx    %rcx, %rdx, %rdx
+    mov     $51, %ecx
+    shrx    %rcx, %rdx, %rdx
+    lea     (%rdi,%rdx), %rdx
+
     mov     RSVD_RBP_OFFSET(%rsp), %rbp
+    mov     RSVD_REDZONE_WORD_OFFSET(%rsp), %rsi
     mov     %rsi, -SE_WORDSIZE(%rsp) # restore the first q/dword of the red zone
 
 # Load all working set cache lines and warm the TLB entries

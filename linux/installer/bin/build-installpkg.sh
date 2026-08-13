@@ -7,8 +7,8 @@
 
 set -e
 
-[[ $# -eq 1 ]] || [[ $# -eq 2 ]] || {
-    echo "Usage : ./build-installpkg.sh sdk | psw "
+[[ $# -ge 1 ]] && [[ $# -le 3 ]] || {
+    echo "Usage : ./build-installpkg.sh sdk | psw [cve-2020-0551] [tlblur]"
     exit 1
 }
 
@@ -54,7 +54,7 @@ case "$INSTALLER_TYPE" in
     ;;
     sdk)
         source ${LINUX_INSTALLER_COMMON_SDK_DIR}/installConfig.${PACKAGE_SUFFIX}
-        ${LINUX_INSTALLER_COMMON_SDK_DIR}/createTarball.sh ${2:-}
+        ${LINUX_INSTALLER_COMMON_SDK_DIR}/createTarball.sh ${2:-} ${3:-}
         cp  ${LINUX_INSTALLER_COMMON_SDK_DIR}/output/${TARBALL_NAME} ${SCRIPT_DIR}
     ;;
 esac

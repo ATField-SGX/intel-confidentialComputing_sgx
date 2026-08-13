@@ -38,6 +38,12 @@
 .data
 g_xsave_size: .long 0
 g_clean_ymm:  .long 0
+    .balign SE_WORDSIZE
+g_aep_pointer:
+    .zero SE_WORDSIZE
+    .balign SE_WORDSIZE
+g_tcs:
+    .zero SE_WORDSIZE
 .text
 DECLARE_GLOBAL_FUNC set_xsave_info
 #if defined(LINUX32)
@@ -100,9 +106,17 @@ EENTER_PROLOG
     je   1f
     vzeroupper
 1:
-    mov frame_arg0, %xbx                        /* tcs addr */
-    lea_pic .Lasync_exit_pointer, %xcx          /* aep addr */
-    mov $SE_EENTER, %xax                        /* EENTER leaf */
+    mov         frame_arg0, %xbx                /* tcs addr */
+    lea_pic     g_tcs, %xax
+    mov         %xbx, (%xax)
+    /* fetch AEP; init when NULL */
+    lea_pic     g_aep_pointer, %xax
+    mov         (%xax), %xcx                    /* aep addr */
+    cmp         $0x0, %xcx
+    jnz         1f
+    lea_pic     __default_async_exit_pointer, %xcx
+    mov         %xcx, (%xax)
+1:  mov         $SE_EENTER, %xax                /* EENTER leaf */
 
 .Leenter_inst:
     ENCLU
@@ -161,7 +175,7 @@ EENTER_PROLOG
     EENTER_EPILOG
 END_FUNC
 
-.Lasync_exit_pointer:
+__default_async_exit_pointer:
     ENCLU
     ud2
     _CET_ENDBR
@@ -170,7 +184,21 @@ END_FUNC
 
 
 DECLARE_GLOBAL_FUNC get_aep
-    lea_pic     .Lasync_exit_pointer, %xax
+    lea_pic     g_aep_pointer, %xax
+    mov         (%xax), %xax
+    ret
+END_FUNC
+
+DECLARE_GLOBAL_FUNC set_aep
+    lea_pic     g_aep_pointer, %xcx
+    mov         naked_arg0, %xax
+    mov         %xax, (%xcx)
+    ret
+END_FUNC
+
+DECLARE_GLOBAL_FUNC get_tcs
+    lea_pic     g_tcs, %xax
+    mov         (%xax), %xax
     ret
 END_FUNC
 

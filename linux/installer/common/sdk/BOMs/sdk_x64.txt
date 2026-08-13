@@ -13,6 +13,7 @@ DeliveryName	InstallName	FileCheckSum	FileFeature	FileOwner
 <deliverydir>/build/linux/libsgx_tservice.a	<installdir>/package/lib64/libsgx_tservice.a	0	main	STP
 <deliverydir>/build/linux/libsgx_tservice_sim.a	<installdir>/package/lib64/libsgx_tservice_sim.a	0	main	STP
 <deliverydir>/build/linux/libsgx_tstdc.a	<installdir>/package/lib64/libsgx_tstdc.a	0	main	STP
+
 <deliverydir>/build/linux/libsgx_tcxx.a	<installdir>/package/lib64/libsgx_tcxx.a	0	main	STP
 <deliverydir>/build/linux/libsgx_tcmalloc.a	<installdir>/package/lib64/libsgx_tcmalloc.a	0	main	STP
 <deliverydir>/build/linux/libsgx_tswitchless.a	<installdir>/package/lib64/libsgx_tswitchless.a	0	main	STP

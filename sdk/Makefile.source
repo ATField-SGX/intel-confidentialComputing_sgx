@@ -73,6 +73,12 @@ components: tstdc tcxx tservice trts tcrypto tprotected_fs uprotected_fs ptrace 
 .PHONY: tstdc
 tstdc: $(LIBTLIBC)
 
+# Optional TLBlur tstdc variant.  It is deliberately outside `components` so
+# the normal SDK build never invokes the custom compiler or changes tstdc.
+.PHONY: tstdc_tlblur
+tstdc_tlblur: $(LIBTLIBC)
+	$(MAKE) -C tlibc/ tlblur
+
 ifndef SERVTD_ATTEST
 $(LIBTLIBC): tlibthread compiler-rt tsafecrt tsetjmp tmm_rsrv
 	$(MAKE) -C tlibc/ -j$(shell nproc) 2> /dev/null

@@ -1,0 +1,2 @@
+DeliveryName	InstallName	FileCheckSum	FileFeature	FileOwner
+<deliverydir>/build/linux/libsgx_tstdc_tlblur.a	<installdir>/package/lib64/libsgx_tstdc_tlblur.a	0	main	STP

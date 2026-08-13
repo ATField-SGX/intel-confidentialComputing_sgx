@@ -40,6 +40,7 @@
 #include <signal.h>
 #include <string.h>
 #include <errno.h>
+#include <stdlib.h>
 #include "isgx_user.h"
 #include <sys/auxv.h>
 #include <elf.h>
@@ -406,14 +407,16 @@ static void __attribute__((constructor)) vdso_detector(void)
 {
 #ifdef SE_SIM
     vdso_sgx_enter_enclave = NULL;
-#else  
-    if(vdso_sgx_enter_enclave == NULL)
+#else
+    vdso_sgx_enter_enclave = NULL;
+    const char *use_vdso = getenv("SGX_URTS_USE_VDSO");
+    if (use_vdso != NULL && use_vdso[0] != '\0' && use_vdso[0] != '0')
     {
-        vdso_sgx_enter_enclave = (vdso_sgx_enter_enclave_t)get_vdso_sym("__vdso_sgx_enter_enclave");
+        vdso_sgx_enter_enclave =
+            (vdso_sgx_enter_enclave_t)get_vdso_sym("__vdso_sgx_enter_enclave");
     }
 #endif
 }
-
 
 int do_ecall(const int fn, const void *ocall_table, const void *ms, CTrustThread *trust_thread)
 {

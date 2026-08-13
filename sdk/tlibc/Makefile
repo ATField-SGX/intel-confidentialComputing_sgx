@@ -46,6 +46,60 @@ LIBC_OBJS := $(sort $(LIBC_OBJS))
 
 LIBC_NAME    := libtlibc.a
 
+# Build the TLBlur variant in a separate object tree.  The normal tlibc rules
+# intentionally remain unchanged so a TLBlur build cannot overwrite the SDK's
+# default objects or archive.
+TLBLUR_OBJDIR       ?= $(BUILD_DIR)/tlblur-tlibc
+TLBLUR_STAGE        ?= $(BUILD_DIR)/.tlblur-tstdc
+TLBLUR_LIBC         ?= $(TLBLUR_OBJDIR)/libtlibc_tlblur.a
+TLBLUR_OUTPUT       ?= $(BUILD_DIR)/libsgx_tstdc_tlblur.a
+TLBLUR_BASE_TSTDC   ?= $(BUILD_DIR)/libsgx_tstdc.a
+TLBLUR_CC           ?= $(CC)
+TLBLUR_CXX          ?= $(CXX)
+TLBLUR_CFLAGS       ?= $(CFLAGS) -mllvm -x86-tlblur-instrument -mllvm -x86-tlblur-inline
+TLBLUR_CXXFLAGS     ?= $(CXXFLAGS) -mllvm -x86-tlblur-instrument -mllvm -x86-tlblur-inline
+TLBLUR_ASFLAGS      ?= $(ASFLAGS)
+
+TLBLUR_OBJS := $(addprefix $(TLBLUR_OBJDIR)/,$(LIBC_OBJS))
+TLBLUR_MEMBER_NAMES := $(sort $(notdir $(TLBLUR_OBJS)))
+
+.PHONY: tlblur
+tlblur: $(TLBLUR_OUTPUT)
+
+$(TLBLUR_LIBC): $(TLBLUR_OBJS) | $(TLBLUR_OBJDIR)
+	@$(RM) -f $@
+	$(AR) rcs $@ $^
+
+$(TLBLUR_OUTPUT): $(TLBLUR_LIBC) $(TLBLUR_BASE_TSTDC) | $(BUILD_DIR)
+	@$(RM) -rf $(TLBLUR_STAGE)
+	@$(MKDIR) $(TLBLUR_STAGE)
+	@cd $(TLBLUR_STAGE) && $(AR) x $(TLBLUR_BASE_TSTDC)
+	@$(RM) -f $(addprefix $(TLBLUR_STAGE)/,$(TLBLUR_MEMBER_NAMES))
+	@$(RM) -f $@
+	$(AR) rcs $@ $(TLBLUR_OBJS)
+	$(AR) qD $@ $(TLBLUR_STAGE)/*.o
+	$(AR) s $@
+	@$(RM) -rf $(TLBLUR_STAGE)
+
+$(TLBLUR_OBJDIR):
+	@$(MKDIR) $@
+
+$(TLBLUR_OBJDIR)/string/consttime_memequal.o: string/consttime_memequal.c
+	@$(MKDIR) $(dir $@)
+	$(TLBLUR_CC) $(filter-out -O2,$(TLBLUR_CFLAGS)) -O1 $(CPPFLAGS) -c $< -o $@
+
+$(TLBLUR_OBJDIR)/%.o: %.c
+	@$(MKDIR) $(dir $@)
+	$(TLBLUR_CC) $(TLBLUR_CFLAGS) $(CPPFLAGS) -c $< -o $@
+
+$(TLBLUR_OBJDIR)/%.o: %.cpp
+	@$(MKDIR) $(dir $@)
+	$(TLBLUR_CXX) $(TLBLUR_CXXFLAGS) $(CPPFLAGS) -c $< -o $@
+
+$(TLBLUR_OBJDIR)/%.o: %.S
+	@$(MKDIR) $(dir $@)
+	$(TLBLUR_CC) $(TLBLUR_ASFLAGS) $(CPPFLAGS) -c $< -o $@
+
 .PHONY: all
 all: $(LIBC_NAME) | $(BUILD_DIR) 
 
@@ -84,3 +138,4 @@ $(BUILD_DIR):
 .PHONY: clean
 clean:
 	@$(RM) $(LIBC_NAME) $(LIBC_OBJS) math/opt/*.o
+	@$(RM) -rf $(TLBLUR_OBJDIR) $(TLBLUR_STAGE) $(TLBLUR_OUTPUT)

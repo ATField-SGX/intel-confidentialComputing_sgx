@@ -89,6 +89,9 @@ if [ "$1" = "cve-2020-0551" ]; then
     python ${SCRIPT_DIR}/gen_source.py --bom=BOMs/sdk_cve_2020_0551_load.txt --cleanup=false
     python ${SCRIPT_DIR}/gen_source.py --bom=BOMs/sdk_cve_2020_0551_cf.txt --cleanup=false
 fi
+if [ "$1" = "tlblur" ] || [ "$2" = "tlblur" ]; then
+    python ${SCRIPT_DIR}/gen_source.py --bom=BOMs/sdk_tlblur_${ARCH}.txt --cleanup=false
+fi
 python ${SCRIPT_DIR}/gen_source.py --bom=../licenses/BOM_license.txt --cleanup=false
 
 # Create the tarball

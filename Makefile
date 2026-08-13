@@ -5,7 +5,7 @@
 #
 
 include buildenv.mk
-.PHONY: all tips preparation psw sdk_no_mitigation sdk clean rebuild tdx servtd_attest servtd_attest_preparation ipp sdk_install_pkg_no_mitigation sdk_install_pkg  sdk_install_pkg_from_source psw_install_pkg
+.PHONY: all tips preparation psw sdk_no_mitigation sdk clean rebuild tdx servtd_attest servtd_attest_preparation ipp sdk_install_pkg_no_mitigation sdk_install_pkg sdk_install_pkg_tlblur sdk_install_pkg_from_source psw_install_pkg
 
 all: tips
 
@@ -104,6 +104,12 @@ sdk_install_pkg_no_mitigation: sdk_no_mitigation
 
 sdk_install_pkg: sdk
 	./linux/installer/bin/build-installpkg.sh sdk cve-2020-0551
+
+sdk_install_pkg_tlblur: sdk
+	@test -n "$(TLBLUR_CC)" || (echo "TLBLUR_CC is required"; exit 1)
+	@test -n "$(TLBLUR_CXX)" || (echo "TLBLUR_CXX is required"; exit 1)
+	$(MAKE) -C sdk tstdc_tlblur TLBLUR_CC="$(TLBLUR_CC)" TLBLUR_CXX="$(TLBLUR_CXX)"
+	./linux/installer/bin/build-installpkg.sh sdk cve-2020-0551 tlblur
 
 sdk_install_pkg_from_source:
 	$(MAKE) ipp

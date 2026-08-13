@@ -85,6 +85,10 @@ typedef uint8_t sgx_reserved_field_1024t[1024];
  */
 typedef sgx_reserved_field_1024t sgx_launch_token_t;
 
+void* SGXAPI sgx_get_aep(void);
+void  SGXAPI sgx_set_aep(void *aep);
+void* SGXAPI sgx_get_tcs(void);
+
 /* Convenient macro to be passed to sgx_create_enclave(). */
 #if !defined(NDEBUG) || defined(EDEBUG)
 #define SGX_DEBUG_FLAG 1
