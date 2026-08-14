@@ -257,8 +257,22 @@ DECLARE_GLOBAL_FUNC enclave_entry
 
 .Ldo_handler:
     mov     %xax, %xdx          /* XDX: cssa */
+    lea_pic g_enclave_state, %xax
+    movl    (%xax), %eax
+    cmpl    $ENCLAVE_CRASHED, %eax
+    je      .Ldo_handler_stack
+    lea_pic __atfield_active, %xax
+    movl    (%xax), %eax
+    testl   %eax, %eax
+    jne     .Ldo_handler_active
+.Ldo_handler_stack:
     GET_STACK_BASE %xbx         /* XAX: static stack, set sp to stack base */
     jmp     .Lswitch_stack
+
+.Ldo_handler_active:
+    mov     $SE_EDECCSSA, %xax
+    .byte   0x0f, 0x01, 0xd7
+    jmp     abort
 
     /* Should not come here */
     ud2
