@@ -61,6 +61,58 @@
 #include <iomanip>
 #include <fstream>
 
+static const xml_parameter_t default_xml_parameters[] = {/* name,                 max_value          min_value,      default value,       flag */
+                                   {"ProdID",               0xFFFF,                0,              0,                   0},
+                                   {"ISVSVN",               0xFFFF,                0,              0,                   0},
+                                   {"ReleaseType",          1,                     0,              0,                   0},
+                                   {"IntelSigned",          1,                     0,              0,                   0},
+                                   {"ProvisionKey",         1,                     0,              0,                   0},
+                                   {"LaunchKey",            1,                     0,              0,                   0},
+                                   {"DisableDebug",         1,                     0,              0,                   0},
+                                   {"HW",                   0x10,                  0,              0,                   0},
+                                   {"TCSNum",               0xFFFFFFFF,            TCS_NUM_MIN,    TCS_NUM_MIN,         0},
+                                   {"TCSMaxNum",            0xFFFFFFFF,            TCS_NUM_MIN,    TCS_NUM_MIN,         0},
+                                   {"TCSMinPool",           0xFFFFFFFF,            0,              TCS_NUM_MIN,         0},
+                                   {"TCSPolicy",            TCS_POLICY_UNBIND,     TCS_POLICY_BIND,TCS_POLICY_UNBIND,   0},
+                                   {"StackMaxSize",         ENCLAVE_MAX_SIZE_64/2, STACK_SIZE_MIN, STACK_SIZE_MAX,      0},
+                                   {"StackMinSize",         ENCLAVE_MAX_SIZE_64/2, STACK_SIZE_MIN, STACK_SIZE_MIN,      0},
+                                   {"HeapMaxSize",          ENCLAVE_MAX_SIZE_64/2, 0,              HEAP_SIZE_MAX,       0},
+                                   {"HeapMinSize",          ENCLAVE_MAX_SIZE_64/2, 0,              HEAP_SIZE_MIN,       0},
+                                   {"HeapInitSize",         ENCLAVE_MAX_SIZE_64/2, 0,              HEAP_SIZE_MIN,       0},
+                                   {"ReservedMemMaxSize",   ENCLAVE_MAX_SIZE_64/2, 0,              RSRV_SIZE_MAX,       0},
+                                   {"ReservedMemMinSize",   ENCLAVE_MAX_SIZE_64/2, 0,              RSRV_SIZE_MIN,       0},
+                                   {"ReservedMemInitSize",  ENCLAVE_MAX_SIZE_64/2, 0,              RSRV_SIZE_MIN,       0},
+                                   {"ReservedMemExecutable",1,                     0,              0,                   0},
+                                   {"MiscSelect",           0x00FFFFFFFF,          0,              DEFAULT_MISC_SELECT, 0},
+                                   {"MiscMask",             0x00FFFFFFFF,          0,              DEFAULT_MISC_MASK,   0},
+                                   {"EnableKSS",            1,                     0,              0,                   0},
+                                   {"ISVFAMILYID_H",        ISVFAMILYID_MAX,       0,              0,                   0},
+                                   {"ISVFAMILYID_L",        ISVFAMILYID_MAX ,      0,              0,                   0},
+                                   {"ISVEXTPRODID_H",       ISVEXTPRODID_MAX,      0,              0,                   0},
+                                   {"ISVEXTPRODID_L",       ISVEXTPRODID_MAX,      0,              0,                   0},
+                                   {"EnclaveImageAddress",  0xFFFFFFFFFFFFFFFF,    0x1000,         0,                   0},
+                                   {"ELRangeStartAddress",  0xFFFFFFFFFFFFFFFF,    0,              0,                   0},
+                                   {"ELRangeSize",          0xFFFFFFFFFFFFFFFF,    0x1000,         0,                   0},
+                                   {"PKRU",                 FEATURE_LOADER_SELECTS, FEATURE_MUST_BE_DISABLED, FEATURE_MUST_BE_DISABLED, 0},
+                                   {"AMX",                  FEATURE_LOADER_SELECTS, FEATURE_MUST_BE_DISABLED, FEATURE_MUST_BE_DISABLED, 0},
+                                   {"UserRegionSize",       ENCLAVE_MAX_SIZE_64/2, 0,              USER_REGION_SIZE,    0},
+                                   {"EnableAEXNotify",      1,                     0,              0,                   0},
+                                   {"EnableIPPFIPS",        1,                     0,              0,                   0},
+                                   {"EnableOSSLFIPS",       1,                     0,              0,                   0}};
+
+size_t get_xml_parameter_count()
+{
+    return sizeof(default_xml_parameters) / sizeof(default_xml_parameters[0]);
+}
+
+bool initialize_xml_parameters(xml_parameter_t *parameter, size_t parameter_count)
+{
+    if (parameter == NULL || parameter_count != get_xml_parameter_count())
+        return false;
+    memcpy(parameter, default_xml_parameters, sizeof(default_xml_parameters));
+    return true;
+}
+
 using tinyxml2::XML_ERROR_FILE_COULD_NOT_BE_OPENED;
 using tinyxml2::XML_ERROR_FILE_NOT_FOUND;
 using tinyxml2::XML_SUCCESS;
@@ -187,9 +239,469 @@ bool parse_metadata_file(const char *xmlpath, xml_parameter_t *parameter, int pa
     return true;
 }
 
+#include "se_page_attr.h"
+
+/*
+ * Dump layout information available in the metadata
+ */
+static bool dump_metadata_layout(metadata_t * metadata)
+{
+    layout_entry_t *start = NULL;
+    layout_entry_t *end = NULL;
+    uint32_t size = 0;
+    uint16_t entry_id = 0;
+    uint16_t entry_cnt = 0;
+
+    do {
+        if (metadata->magic_num != METADATA_MAGIC || metadata->size == 0)
+            break;
+
+        size += metadata->size;
+        if (size < metadata->size) {
+            return false;
+        }
+        else {
+            SE_TRACE_DEBUG("\n");
+            se_trace(SE_TRACE_DEBUG, "\tMetadata Version = 0x%016llX\n", metadata->version);
+            start = GET_PTR(layout_entry_t, metadata, metadata->dirs[DIR_LAYOUT].offset);
+            end = GET_PTR(layout_entry_t, start, metadata->dirs[DIR_LAYOUT].size);
+            entry_cnt = 0;
+            for (layout_entry_t *layout = start; layout < end; layout++)
+            {
+                entry_id = layout->id;
+
+                if (!IS_GROUP_ID(entry_id)) {
+                    se_trace(SE_TRACE_DEBUG, "\tEntry Id(%2u) = %4u, %-16s,  ", entry_cnt++, entry_id, layout_id_str[entry_id]);
+                    se_trace(SE_TRACE_DEBUG, "Page Count = %5u,  ", layout->page_count);
+                    se_trace(SE_TRACE_DEBUG, "Attributes = 0x%02X,  ", layout->attributes);
+                    se_trace(SE_TRACE_DEBUG, "Flags = 0x%016llX,  ", layout->si_flags);
+                    se_trace(SE_TRACE_DEBUG, "RVA = 0x%016llX --- 0x%016llX\n", layout->rva, layout->rva + 4096 * layout->page_count);
+                }
+                else {
+                    layout_group_t *layout_grp = reinterpret_cast<layout_group_t*>(layout);
+                    se_trace(SE_TRACE_DEBUG, "\tEntry Id(%2u) = %4u, %-16s,  ", entry_cnt++, entry_id, layout_id_str[entry_id & ~(GROUP_FLAG)]);
+                    se_trace(SE_TRACE_DEBUG, "Entry Count = %4u,  ", layout_grp->entry_count);
+                    se_trace(SE_TRACE_DEBUG, "Load Times = %u,     ", layout_grp->load_times);
+                    se_trace(SE_TRACE_DEBUG, "LStep = 0x%016llX\n", layout_grp->load_step);
+                }
+            }
+
+        }
+        metadata = (metadata_t *)((size_t)metadata + metadata->size);
+
+    } while (size < METADATA_SIZE);
+
+    return true;
+}
+
+/*
+ * We need to add the RSRV layout back at the end.
+ */
+static bool metadata_add_layout(metadata_t *metadata, layout_t * min_layout_to_add, layout_t * init_layout_to_add, layout_t * max_layout_to_add)
+{
+    uint32_t size = 0;
+    void * start = GET_PTR(void *, metadata, metadata->dirs[DIR_LAYOUT].offset);
+    void * end = NULL;
+    layout_entry_t * layout = NULL;
+    uint16_t entry_id = 0;
+
+    if (min_layout_to_add)
+    {
+        size = metadata->size;
+        end = GET_PTR(void *, start, metadata->dirs[DIR_LAYOUT].size);
+        if (memcpy_s(end, METADATA_SIZE - size, min_layout_to_add, sizeof(layout_t))) {
+            se_trace(SE_TRACE_WARNING, "%s: Error memcpy_s failed\n", __FUNCTION__);
+            return false;
+        }
+        metadata->size += (uint32_t)sizeof(layout_t);
+        metadata->dirs[DIR_LAYOUT].size += (uint32_t)sizeof(layout_t);
+
+        layout = (layout_entry_t *)min_layout_to_add;
+        entry_id = layout->id;
+        SE_TRACE_DEBUG("\n");
+        if (!IS_GROUP_ID(entry_id)) {
+            se_trace(SE_TRACE_DEBUG, "\tEntry Id(%2u) = %4u, %-16s,  ", 0, entry_id, layout_id_str[entry_id]);
+            se_trace(SE_TRACE_DEBUG, "Page Count = %5u,  ", layout->page_count);
+            se_trace(SE_TRACE_DEBUG, "Attributes = 0x%02X,  ", layout->attributes);
+            se_trace(SE_TRACE_DEBUG, "Flags = 0x%016llX,  ", layout->si_flags);
+            se_trace(SE_TRACE_DEBUG, "RVA = 0x%016llX --- 0x%016llX\n", layout->rva, layout->rva + 4096 * layout->page_count);
+        }
+        else {
+            layout_group_t *layout_grp = reinterpret_cast<layout_group_t*>(layout);
+            se_trace(SE_TRACE_DEBUG, "\tEntry Id(%2u) = %4u, %-16s,  ", 0, entry_id, layout_id_str[entry_id & ~(GROUP_FLAG)]);
+            se_trace(SE_TRACE_DEBUG, "Entry Count = %4u,  ", layout_grp->entry_count);
+            se_trace(SE_TRACE_DEBUG, "Load Times = %u,     ", layout_grp->load_times);
+            se_trace(SE_TRACE_DEBUG, "LStep = 0x%016llX\n", layout_grp->load_step);
+        }
+
+    }
+
+    if (init_layout_to_add)
+    {
+        // Remove the PAGE_ATTR_POST_ADD attribute so that a dynamic
+        // range isn't created during enclave loading time.
+        init_layout_to_add->entry.attributes &= (uint16_t)(~PAGE_ATTR_POST_ADD);
+
+        size = metadata->size;
+        end = GET_PTR(void *, start, metadata->dirs[DIR_LAYOUT].size);
+        if (memcpy_s(end, METADATA_SIZE - size, init_layout_to_add, sizeof(layout_t))) {
+            se_trace(SE_TRACE_WARNING, "%s: Error memcpy_s failed\n", __FUNCTION__);
+            return false;
+        }
+        metadata->size += (uint32_t)sizeof(layout_t);
+        metadata->dirs[DIR_LAYOUT].size += (uint32_t)sizeof(layout_t);
+
+        layout = (layout_entry_t *)init_layout_to_add;
+        entry_id = layout->id;
+        SE_TRACE_DEBUG("\n");
+        if (!IS_GROUP_ID(entry_id)) {
+            se_trace(SE_TRACE_DEBUG, "\tEntry Id(%2u) = %4u, %-16s,  ", 0, entry_id, layout_id_str[entry_id]);
+            se_trace(SE_TRACE_DEBUG, "Page Count = %5u,  ", layout->page_count);
+            se_trace(SE_TRACE_DEBUG, "Attributes = 0x%02X,  ", layout->attributes);
+            se_trace(SE_TRACE_DEBUG, "Flags = 0x%016llX,  ", layout->si_flags);
+            se_trace(SE_TRACE_DEBUG, "RVA = 0x%016llX --- 0x%016llX\n", layout->rva, layout->rva + 4096 * layout->page_count);
+        }
+        else {
+            layout_group_t *layout_grp = reinterpret_cast<layout_group_t*>(layout);
+            se_trace(SE_TRACE_DEBUG, "\tEntry Id(%2u) = %4u, %-16s,  ", 0, entry_id, layout_id_str[entry_id & ~(GROUP_FLAG)]);
+            se_trace(SE_TRACE_DEBUG, "Entry Count = %4u,  ", layout_grp->entry_count);
+            se_trace(SE_TRACE_DEBUG, "Load Times = %u,     ", layout_grp->load_times);
+            se_trace(SE_TRACE_DEBUG, "LStep = 0x%016llX\n", layout_grp->load_step);
+        }
+    }
+
+    if (max_layout_to_add)
+    {
+        // Modify LAYOUT_ID_RSRV_MAX so that it isn't included in the
+        // MRENCLAVE. Remove the PAGE_ATTR_POST_ADD attribute so that a
+        // dynamic range isn't created during enclave loading time.
+        max_layout_to_add->entry.si_flags = SI_FLAG_NONE;
+        max_layout_to_add->entry.attributes &= (uint16_t)(~PAGE_ATTR_POST_ADD);
+
+        size = metadata->size;
+        end = GET_PTR(void *, start, metadata->dirs[DIR_LAYOUT].size);
+        if (memcpy_s(end, METADATA_SIZE - size, max_layout_to_add, sizeof(layout_t))) {
+            se_trace(SE_TRACE_WARNING, "%s: Error memcpy_s failed\n", __FUNCTION__);
+            return false;
+        }
+        metadata->size += (uint32_t)sizeof(layout_t);
+        metadata->dirs[DIR_LAYOUT].size += (uint32_t)sizeof(layout_t);
+
+        layout = (layout_entry_t *)max_layout_to_add;
+        entry_id = layout->id;
+        SE_TRACE_DEBUG("\n");
+        if (!IS_GROUP_ID(entry_id)) {
+            se_trace(SE_TRACE_DEBUG, "\tEntry Id(%2u) = %4u, %-16s,  ", 0, entry_id, layout_id_str[entry_id]);
+            se_trace(SE_TRACE_DEBUG, "Page Count = %5u,  ", layout->page_count);
+            se_trace(SE_TRACE_DEBUG, "Attributes = 0x%02X,  ", layout->attributes);
+            se_trace(SE_TRACE_DEBUG, "Flags = 0x%016llX,  ", layout->si_flags);
+            se_trace(SE_TRACE_DEBUG, "RVA = 0x%016llX --- 0x%016llX\n", layout->rva, layout->rva + 4096 * layout->page_count);
+        }
+        else {
+            layout_group_t *layout_grp = reinterpret_cast<layout_group_t*>(layout);
+            se_trace(SE_TRACE_DEBUG, "\tEntry Id(%2u) = %4u, %-16s,  ", 0, entry_id, layout_id_str[entry_id & ~(GROUP_FLAG)]);
+            se_trace(SE_TRACE_DEBUG, "Entry Count = %4u,  ", layout_grp->entry_count);
+            se_trace(SE_TRACE_DEBUG, "Load Times = %u,     ", layout_grp->load_times);
+            se_trace(SE_TRACE_DEBUG, "LStep = 0x%016llX\n", layout_grp->load_step);
+        }
+    }
+
+    return true;
+}
+
+static void metadata_cleanup(metadata_t *metadata, uint32_t size_to_reduce)
+{
+    layout_t *heap_max = NULL, *heap_init = NULL, *ut_stack_max = NULL;
+    metadata->dirs[DIR_LAYOUT].size -= size_to_reduce;
+    metadata->size -= size_to_reduce;
+
+    layout_t *start = GET_PTR(layout_t, metadata, metadata->dirs[DIR_LAYOUT].offset);
+    layout_t *end = GET_PTR(layout_t, start, metadata->dirs[DIR_LAYOUT].size);
+    for (layout_t *l = start; l < end; l++)
+    {
+        if (heap_max != NULL && heap_init != NULL && ut_stack_max != NULL)
+            break;
+
+        if ((heap_max == NULL) && (l->entry.id == LAYOUT_ID_HEAP_MAX))
+        {
+            heap_max = l;
+            continue;
+        }
+        if ((heap_init == NULL) && (l->entry.id == LAYOUT_ID_HEAP_INIT))
+        {
+            heap_init = l;
+            continue;
+        }
+        if ((ut_stack_max == NULL) && (l->entry.id == LAYOUT_ID_STACK_MAX))
+        {
+            ut_stack_max = l;
+            continue;
+        }
+    }
+
+    // if there exists LAYOUT_ID_HEAP_MAX, modify it so that it won't be included
+    // in the MRENCLAVE, also remove the PAGE_ATTR_POST_ADD attribute so that
+    // dynamic range won't be created during enclave loading time
+    if (heap_max)
+    {
+        heap_max->entry.si_flags = SI_FLAG_NONE;
+        heap_max->entry.attributes &= (uint16_t)(~PAGE_ATTR_POST_ADD);
+    }
+
+    if (heap_init)
+    {
+        heap_init->entry.attributes &= (uint16_t)(~PAGE_ATTR_POST_ADD);
+    }
+
+    if (ut_stack_max)
+    {
+        ut_stack_max->entry.attributes &= (uint16_t)(~PAGE_ATTR_POST_ADD);
+    }
+}
+
+static bool append_compatible_metadata(metadata_t *compat_metadata, metadata_t *metadata)
+{
+    metadata_t *dest_meta = metadata;
+    uint32_t size = 0;
+    do{
+        if(dest_meta->magic_num != METADATA_MAGIC || dest_meta->size == 0)
+            break;
+
+        size += dest_meta->size;
+        if(size < dest_meta->size)
+            return false;
+        dest_meta = (metadata_t *)((size_t)dest_meta + dest_meta->size);
+
+    } while(size < METADATA_SIZE);
+
+    if(size + compat_metadata->size < size ||
+            size + compat_metadata->size < compat_metadata->size ||
+            size + compat_metadata->size > METADATA_SIZE)
+        return false;
+
+    if(memcpy_s(dest_meta, METADATA_SIZE - size , compat_metadata, compat_metadata->size))
+        return false;
+    return true;
+}
+
+static bool handle_compatible_metadata(metadata_t *compat_metadata, metadata_t *metadata, bool append)
+{
+    if (append) {
+        se_trace(SE_TRACE_ERROR, "%s: Append metadata version 0x%lx\n", __FUNCTION__, compat_metadata->version);
+        return append_compatible_metadata(compat_metadata, metadata);
+    } else {
+        // overwrite
+        memset(metadata, 0, METADATA_SIZE);
+        if(memcpy_s(metadata, METADATA_SIZE, compat_metadata, compat_metadata->size))
+            return false;
+        se_trace(SE_TRACE_ERROR, "%s: Overwrite with metadata version 0x%lx\n", __FUNCTION__, metadata->version);
+        return true;
+    }
+}
+
+bool finalize_metadata_core(metadata_t *metadata, const xml_parameter_t *parameter, uint8_t meta_versions)
+{
+    if(meta_versions == 0)
+    {
+        se_trace(SE_TRACE_ERROR, "metadata version is invalid");
+        return false;
+    }
+
+    bool meta_sgx1_only = ((meta_versions & 3u) == 1u);
+    bool meta_sgx2_only = ((meta_versions & 3u) == 2u);
+    bool append = (meta_sgx1_only ? false : true);
+
+    if (meta_sgx2_only) {
+        se_trace(SE_TRACE_ERROR, "%s: Only requires SGX2 metadata\n", __FUNCTION__);
+        return true;
+    }
+
+    metadata_t *metadata2 = (metadata_t *)malloc(metadata->size);
+    if(!metadata2)
+    {
+        se_trace(SE_TRACE_ERROR, NO_MEMORY_ERROR);
+        return false;
+    }
+    SE_TRACE_DEBUG("\n");
+
+    if (memcpy_s(metadata2, metadata->size, metadata, metadata->size)) {
+        se_trace(SE_TRACE_ERROR, "%s: Error memcpy_s failed\n", __FUNCTION__);
+        free(metadata2);
+        return false;
+    }
+
+    // append 1_9 metadata
+    if(parameter[ELRANGESIZE].value != 0)
+    {
+        metadata2->version = META_DATA_MAKE_VERSION(SGX_1_ELRANGE_MAJOR_VERSION,SGX_1_9_MINOR_VERSION);
+    }
+    else
+    {
+        metadata2->version = META_DATA_MAKE_VERSION(SGX_1_9_MAJOR_VERSION,SGX_1_9_MINOR_VERSION);
+    }
+    layout_t *start = GET_PTR(layout_t, metadata2, metadata2->dirs[DIR_LAYOUT].offset);
+    layout_t *end = GET_PTR(layout_t, start, metadata2->dirs[DIR_LAYOUT].size);
+    layout_t tmp_layout;
+    layout_t *ut_start = NULL, *ut_end = NULL, *after_ut = NULL;
+    layout_t *min_rsrv_entry = NULL;
+    layout_t *init_rsrv_entry = NULL;
+    layout_t *max_rsrv_entry = NULL;
+    uint32_t size_to_reduce = 0;
+    bool ret = false;
+
+    // locate utility thread start and end entries
+    for (layout_t *l = start; l < end; l++)
+    {
+        if (ut_start != NULL && ut_end != NULL)
+            break;
+
+        if ((ut_start == NULL) && (l->entry.id == LAYOUT_ID_GUARD))
+        {
+            ut_start = l;
+            continue;
+        }
+        if ((ut_end == NULL) && (l->entry.id == LAYOUT_ID_TD))
+        {
+            ut_end = l;
+            continue;
+        }
+    }
+
+    assert((ut_start != NULL) && (ut_end != NULL) && ((size_t)ut_end > (size_t)ut_start));
+
+    /* Store location of RSRV layouts */
+    for (layout_t *l = start; l < end; l++)
+    {
+        if (l->entry.id == LAYOUT_ID_RSRV_MIN)
+        {
+            min_rsrv_entry = l;
+            continue;
+        }
+        else if (l->entry.id == LAYOUT_ID_RSRV_INIT)
+        {
+            init_rsrv_entry = l;
+            continue;
+        }
+        else if (l->entry.id == LAYOUT_ID_RSRV_MAX)
+        {
+            max_rsrv_entry = l;
+            continue;
+        }
+    }
+
+    // entry/group layout if they all exist:
+    // utility thread | minpool thread | minpool group | eremove thread | eremove group | dyn thread | dyn group
+
+    // there is only an utility thread and no RSVR layout in layout table
+    if (&ut_end[1] == end)
+    {
+        se_trace(SE_TRACE_DEBUG, "%s: Utility thread TD is the last layout\n", __FUNCTION__);
+        metadata_cleanup(metadata2, 0);
+        ret = handle_compatible_metadata(metadata2, metadata, append);
+        free(metadata2);
+        return ret;
+    }
+    // only an utility thread + RSVR layouts
+    else if(&ut_end[1] == min_rsrv_entry)
+    {
+        se_trace(SE_TRACE_DEBUG, "%s: Utility thread TD + RSVR layout\n", __FUNCTION__);
+        metadata_cleanup(metadata2, 0);
+        // Cleanup dynamic range for RSRV
+        if (init_rsrv_entry)
+        {
+            init_rsrv_entry->entry.attributes &= (uint16_t)(~PAGE_ATTR_POST_ADD);
+        }
+        if (max_rsrv_entry)
+        {
+            max_rsrv_entry->entry.si_flags = SI_FLAG_NONE;
+            max_rsrv_entry->entry.attributes &= (uint16_t)(~PAGE_ATTR_POST_ADD);
+        }
+        ret = handle_compatible_metadata(metadata2, metadata, append);
+        free(metadata2);
+        return ret;
+    }
+
+    // build a group layout to represent all the possible minpool/eremoved layouts
+    after_ut = &ut_end[1];
+    uint16_t num_of_entries = (uint16_t)(after_ut - ut_start);
+
+    memset(&tmp_layout, 0, sizeof(tmp_layout));
+    tmp_layout.group.id = LAYOUT_ID_THREAD_GROUP;
+    tmp_layout.group.entry_count = num_of_entries;
+    tmp_layout.group.load_times = (uint32_t)parameter[TCSNUM].value - 1;
+    for (uint32_t i = 0; i < tmp_layout.group.entry_count; i++)
+    {
+        tmp_layout.group.load_step += (((uint64_t)ut_start[i].entry.page_count) << SE_PAGE_SHIFT);
+    }
+
+    memcpy_s(after_ut, sizeof(layout_t), &tmp_layout, sizeof(layout_t));
+    size_to_reduce = (uint32_t)((size_t)end - (size_t)(&after_ut[1]));
+    metadata_cleanup(metadata2, size_to_reduce);
+    /* Append RSRV layout information */
+    if (NULL != min_rsrv_entry)
+    {
+        ret = metadata_add_layout(metadata2, min_rsrv_entry, init_rsrv_entry, max_rsrv_entry);
+        if (false == ret)
+            goto end;
+    }
+    ret = handle_compatible_metadata(metadata2, metadata, append);
+    if (false == ret)
+        goto end;
+    ret = dump_metadata_layout(metadata);
+end:
+    free(metadata2);
+    return ret;
+}
+
+
+bool refresh_signer_layout_result(const metadata_t *metadata,
+                                  atfield_sgx_signer_layout_result *result)
+{
+    if (metadata == NULL || result == NULL)
+        return false;
+    const uint32_t layout_offset = metadata->dirs[DIR_LAYOUT].offset;
+    const uint32_t layout_size = metadata->dirs[DIR_LAYOUT].size;
+    if (layout_offset > METADATA_SIZE || layout_size > METADATA_SIZE - layout_offset ||
+        (layout_size % sizeof(layout_t)) != 0)
+        return false;
+    const size_t layout_count = layout_size / sizeof(layout_t);
+    if (layout_count > ATFIELD_SGX_SIGNER_LAYOUT_MAX_RECORDS)
+        return false;
+    result->metadata_version = metadata->version;
+    result->enclave_size = metadata->enclave_size;
+    const layout_t *layouts = GET_PTR(layout_t, metadata, layout_offset);
+    memcpy(result->records, layouts, layout_size);
+    result->layout_count = (uint32_t)layout_count;
+    return true;
+}
+
+bool build_metadata_core(metadata_t *metadata, BinParser *parser,
+                         SharedObjectParser *fips_parser,
+                         const xml_parameter_t *parameter,
+                         atfield_sgx_signer_layout_result *result,
+                         uint8_t *meta_versions)
+{
+    if (metadata == NULL || parser == NULL || parameter == NULL)
+        return false;
+
+    CMetadata meta(metadata, parser, fips_parser);
+    if (!meta.build_metadata(parameter))
+        return false;
+    if (meta_versions != NULL)
+        *meta_versions = meta.get_meta_versions();
+    if (result == NULL)
+        return true;
+
+    memset(result, 0, sizeof(*result));
+    result->ordinary_image_end_rva = meta.get_ordinary_image_end_rva();
+    if (!refresh_signer_layout_result(metadata, result))
+        return false;
+    return true;
+}
+
 CMetadata::CMetadata(metadata_t *metadata, BinParser *parser, SharedObjectParser *fips_parser)
     :  m_meta_verions(0), m_metadata(metadata), m_parser(parser)
-    , m_rva(0), m_gd_size(0), m_gd_template(NULL), m_fips_parser(fips_parser)
+    , m_rva(0), m_ordinary_image_end(0), m_gd_size(0), m_gd_template(NULL), m_fips_parser(fips_parser)
 {
     memset(m_metadata, 0, sizeof(metadata_t));
     memset(&m_create_param, 0, sizeof(m_create_param));
@@ -886,7 +1398,8 @@ bool CMetadata::update_layout_entries()
         return false;
     }
 
-    m_rva = calculate_sections_size();
+    m_ordinary_image_end = calculate_sections_size();
+    m_rva = m_ordinary_image_end;
     if(m_rva == 0)
     {
         se_trace(SE_TRACE_ERROR, INVALID_ENCLAVE_ERROR);

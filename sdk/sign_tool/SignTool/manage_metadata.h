@@ -38,6 +38,7 @@
 #include "loader.h"
 #include "binparser.h"
 #include "shared_object_parser.h"
+#include "atfield_sgx_signer_layout.h"
 
 #define MAX_BUFFER_SIZE 4096
 
@@ -91,6 +92,7 @@ typedef enum _para_type_t
     ENABLEIPPFIPS,
     ENABLEOSSLFIPS
 } para_type_t;
+#define PARAMETER_COUNT (ENABLEOSSLFIPS + 1)
 
 typedef struct _xml_parameter_t
 {
@@ -103,6 +105,17 @@ typedef struct _xml_parameter_t
 
 
 bool parse_metadata_file(const char *xmlpath, xml_parameter_t *parameter, int parameter_count);
+bool initialize_xml_parameters(xml_parameter_t *parameter, size_t parameter_count);
+size_t get_xml_parameter_count();
+bool build_metadata_core(metadata_t *metadata, BinParser *parser,
+                         SharedObjectParser *fips_parser,
+                         const xml_parameter_t *parameter,
+                         atfield_sgx_signer_layout_result *result,
+                         uint8_t *meta_versions);
+bool finalize_metadata_core(metadata_t *metadata, const xml_parameter_t *parameter,
+                            uint8_t meta_versions);
+bool refresh_signer_layout_result(const metadata_t *metadata,
+                                  atfield_sgx_signer_layout_result *result);
 bool update_metadata(const char *path, const metadata_t *metadata, uint64_t meta_offset);
 bool print_metadata(const char *path, const metadata_t *metadata);
 
@@ -120,6 +133,7 @@ public:
     sgx_misc_select_t get_config_misc_mask();
     sgx_misc_select_t get_config_desired_misc_select();
     uint8_t get_meta_versions() { return m_meta_verions; }
+    uint64_t get_ordinary_image_end_rva() const { return m_ordinary_image_end; }
 private:
     bool get_time(uint32_t *date);
     bool modify_metadata(const xml_parameter_t *parameter);
@@ -155,6 +169,7 @@ private:
     elrange_config_entry_t m_elrange_config_entry;
     std::vector <layout_t> m_layouts;
     uint64_t m_rva;
+    uint64_t m_ordinary_image_end;
     uint32_t m_gd_size;
     uint8_t *m_gd_template;
     SharedObjectParser *m_fips_parser;
