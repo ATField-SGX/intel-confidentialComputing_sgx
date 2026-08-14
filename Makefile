@@ -7,6 +7,8 @@
 include buildenv.mk
 .PHONY: all tips preparation psw sdk_no_mitigation sdk clean rebuild tdx servtd_attest servtd_attest_preparation ipp sdk_install_pkg_no_mitigation sdk_install_pkg  sdk_install_pkg_from_source psw_install_pkg
 
+ATFIELD_OFFLINE_PREPARATION ?= 0
+
 all: tips
 
 tips:
@@ -25,12 +27,18 @@ tips:
 preparation:
 # As SDK build needs to clone and patch openmp, we cannot support the mode that download the source from github as zip.
 # Only enable the download from git
-	# git submodule update --init --recursive
+	@if [ "$(ATFIELD_OFFLINE_PREPARATION)" = 1 ]; then \
+		:; \
+	else \
+		git submodule update --init --recursive; \
+	fi
 	cd external/dcap_source/external/jwt-cpp && git apply ../0001-Add-a-macro-to-disable-time-support-in-jwt-for-SGX.patch >/dev/null 2>&1 || \
 	git apply ../0001-Add-a-macro-to-disable-time-support-in-jwt-for-SGX.patch -R --check
 	cd external/dcap_source/external/wasm-micro-runtime && git apply ../0001-wasm-micro-runtime.patch >/dev/null 2>&1 || \
 	git apply ../0001-wasm-micro-runtime.patch -R --check
-	# ./external/dcap_source/QuoteVerification/prepare_sgxssl.sh nobuild
+	@if [ "$(ATFIELD_OFFLINE_PREPARATION)" != 1 ]; then \
+		./external/dcap_source/QuoteVerification/prepare_sgxssl.sh nobuild; \
+	fi
 	cd external/openmp/openmp_code && git apply ../0001-Enable-OpenMP-in-SGX.patch >/dev/null 2>&1 ||  git apply ../0001-Enable-OpenMP-in-SGX.patch --check -R
 
 	# TODO refactor to remove duplication with the ./external/protobuf/Makefile.
@@ -38,8 +46,10 @@ preparation:
 	# If you are adding a new patch over this one, write your patch's name to .sgx_patched
 	@if ! grep -q "sgx_protobuf" external/protobuf/protobuf_code/.sgx_patched 2>/dev/null; then \
 		cd external/protobuf/protobuf_code && \
-		git apply ../sgx_protobuf.patch >/dev/null 2>&1 || git apply ../sgx_protobuf.patch --check -R && \
-		true; \
+		(git apply ../sgx_protobuf.patch >/dev/null 2>&1 || git apply ../sgx_protobuf.patch --check -R) && \
+		if [ "$(ATFIELD_OFFLINE_PREPARATION)" != 1 ]; then \
+			git submodule update --init --recursive; \
+		fi; \
 	fi
 	# If you are adding a new patch over this one, write your patch's name to .sgx_patched
 	@if ! grep -q "sgx_abseil" external/protobuf/abseil-cpp/.sgx_patched 2>/dev/null; then \
@@ -52,8 +62,10 @@ preparation:
 	cd external/cbor/sgx_libcbor && git apply ../sgx_cbor.patch >/dev/null 2>&1 || git apply ../sgx_cbor.patch --check -R
 	cd external/ippcp_internal/ipp-crypto && git apply ../0001-IPP-crypto-for-SGX.patch > /dev/null 2>&1 || git apply ../0001-IPP-crypto-for-SGX.patch --check -R
 	cd external/ippcp_internal/ipp-crypto && mkdir -p build
-	# ./download_prebuilt.sh
-	# ./external/dcap_source/QuoteGeneration/download_prebuilt.sh
+	@if [ "$(ATFIELD_OFFLINE_PREPARATION)" != 1 ]; then \
+		./download_prebuilt.sh; \
+		./external/dcap_source/QuoteGeneration/download_prebuilt.sh; \
+	fi
 	cd external/libcxxrt/libcxxrt_code && git apply ../sgx_libcxxrt.patch >/dev/null 2>&1 || git apply ../sgx_libcxxrt.patch --check -R
 
 psw:
