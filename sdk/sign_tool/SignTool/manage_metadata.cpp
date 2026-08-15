@@ -60,6 +60,7 @@
 #include <iostream>
 #include <iomanip>
 #include <fstream>
+#include <limits>
 
 static const xml_parameter_t default_xml_parameters[] = {/* name,                 max_value          min_value,      default value,       flag */
                                    {"ProdID",               0xFFFF,                0,              0,                   0},
@@ -679,7 +680,9 @@ bool build_metadata_core(metadata_t *metadata, BinParser *parser,
                          SharedObjectParser *fips_parser,
                          const xml_parameter_t *parameter,
                          atfield_sgx_signer_layout_result *result,
-                         uint8_t *meta_versions)
+                         uint8_t *meta_versions,
+                         std::vector<atfield_sgx_signer_static_tcs>
+                             *typed_result)
 {
     if (metadata == NULL || parser == NULL || parameter == NULL)
         return false;
@@ -696,6 +699,8 @@ bool build_metadata_core(metadata_t *metadata, BinParser *parser,
     result->ordinary_image_end_rva = meta.get_ordinary_image_end_rva();
     if (!refresh_signer_layout_result(metadata, result))
         return false;
+    if (typed_result != NULL)
+        *typed_result = meta.get_static_tcs_instances();
     return true;
 }
 
@@ -1409,12 +1414,54 @@ bool CMetadata::update_layout_entries()
 
     SE_TRACE_DEBUG("\n");
 
+    m_static_tcs_instances.clear();
+    auto append_static_tcs = [&](const layout_entry_t &tcs,
+                                 const layout_entry_t &stack,
+                                 uint64_t rva_delta) -> bool {
+        if (m_static_tcs_instances.size() >=
+            ATFIELD_SGX_SIGNER_LAYOUT_MAX_RECORDS)
+            return false;
+        const uint64_t tcs_rva = tcs.rva + rva_delta;
+        const uint64_t stack_bottom = stack.rva + rva_delta;
+        const uint64_t stack_bytes =
+            static_cast<uint64_t>(stack.page_count) * SE_PAGE_SIZE;
+        if (tcs_rva < tcs.rva || stack_bottom < stack.rva ||
+            stack.page_count == 0 ||
+            stack_bytes / SE_PAGE_SIZE != stack.page_count ||
+            stack_bottom > std::numeric_limits<uint64_t>::max() - stack_bytes)
+            return false;
+        const uint64_t stack_top = stack_bottom + stack_bytes;
+        m_static_tcs_instances.push_back(
+            {static_cast<uint64_t>(m_static_tcs_instances.size()) + 1,
+             tcs_rva, stack_bottom, stack.page_count, stack_top});
+        return true;
+    };
+    auto find_stack = [&](size_t begin, size_t tcs_index,
+                          layout_entry_t &stack) -> bool {
+        for (size_t index = tcs_index; index > begin; --index) {
+            const layout_entry_t &candidate = m_layouts[index - 1].entry;
+            if (candidate.id == LAYOUT_ID_STACK_MIN) {
+                stack = candidate;
+                return true;
+            }
+            if (candidate.id == LAYOUT_ID_TCS)
+                break;
+        }
+        return false;
+    };
+
     for(uint32_t i = 0; i < m_layouts.size(); i++)
     {
         if(!IS_GROUP_ID(m_layouts[i].entry.id))
         {
             m_layouts[i].entry.rva = m_rva;
             m_rva += (((uint64_t)m_layouts[i].entry.page_count) << SE_PAGE_SHIFT);
+            if (m_layouts[i].entry.id == LAYOUT_ID_TCS) {
+                layout_entry_t stack{};
+                if (!find_stack(0, i, stack) ||
+                    !append_static_tcs(m_layouts[i].entry, stack, 0))
+                    return false;
+            }
 
             se_trace(SE_TRACE_DEBUG, "\tEntry Id(%2u) = %4u, %-16s,  ", i, m_layouts[i].entry.id, layout_id_str[m_layouts[i].entry.id]);
             se_trace(SE_TRACE_DEBUG, "Page Count = %5u,  ", m_layouts[i].entry.page_count);
@@ -1427,6 +1474,23 @@ bool CMetadata::update_layout_entries()
            for (uint32_t j = 0; j < m_layouts[i].group.entry_count; j++)
            {
                 m_layouts[i].group.load_step += ((uint64_t)(m_layouts[i-j-1].entry.page_count)) << SE_PAGE_SHIFT;
+           }
+           if (m_layouts[i].group.id == LAYOUT_ID_THREAD_GROUP) {
+             const uint32_t begin =
+                 i - m_layouts[i].group.entry_count;
+             for (uint32_t repeat = 1;
+                  repeat <= m_layouts[i].group.load_times; ++repeat) {
+               const uint64_t delta =
+                   static_cast<uint64_t>(repeat) * m_layouts[i].group.load_step;
+               for (uint32_t member = begin; member < i; ++member) {
+                 if (m_layouts[member].entry.id != LAYOUT_ID_TCS)
+                   continue;
+                 layout_entry_t stack{};
+                 if (!find_stack(begin, member, stack) ||
+                     !append_static_tcs(m_layouts[member].entry, stack, delta))
+                   return false;
+               }
+             }
            }
            uint64_t temp_rva = m_rva;
            m_rva += m_layouts[i].group.load_times * m_layouts[i].group.load_step;

@@ -227,7 +227,8 @@ static bool measure_enclave(uint8_t *hash, const char *dllpath, const char *fips
     }
 
     // generate metadata
-    if(build_metadata_core(metadata, parser.get(), extra_parser.get(), parameter, NULL, meta_versions) == false)
+    if(build_metadata_core(metadata, parser.get(), extra_parser.get(), parameter,
+                           NULL, meta_versions, NULL) == false)
     {
         close_handle(fh);
         if (ossl_fips_on)

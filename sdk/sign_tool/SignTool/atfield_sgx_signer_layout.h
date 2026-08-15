@@ -21,6 +21,14 @@ typedef struct atfield_sgx_signer_layout_record {
     uint32_t words[4];
 } atfield_sgx_signer_layout_record;
 
+typedef struct atfield_sgx_signer_static_tcs {
+    uint64_t instance;
+    uint64_t tcs_rva;
+    uint64_t stack_bottom;
+    uint64_t stack_page_count;
+    uint64_t stack_top;
+} atfield_sgx_signer_static_tcs;
+
 typedef struct atfield_sgx_signer_layout_result {
     uint64_t metadata_version;
     uint64_t enclave_size;
@@ -29,10 +37,28 @@ typedef struct atfield_sgx_signer_layout_result {
     atfield_sgx_signer_layout_record records[ATFIELD_SGX_SIGNER_LAYOUT_MAX_RECORDS];
 } atfield_sgx_signer_layout_result;
 
+typedef struct atfield_sgx_signer_layout_result_v2 {
+    uint32_t abi_version;
+    uint32_t struct_size;
+    uint64_t metadata_version;
+    uint64_t enclave_size;
+    uint64_t ordinary_image_end_rva;
+    uint32_t layout_count;
+    atfield_sgx_signer_layout_record records[ATFIELD_SGX_SIGNER_LAYOUT_MAX_RECORDS];
+    uint32_t static_tcs_capacity;
+    uint32_t static_tcs_count;
+    atfield_sgx_signer_static_tcs *static_tcs;
+} atfield_sgx_signer_layout_result_v2;
+
+#define ATFIELD_SGX_SIGNER_LAYOUT_ABI_V2 2u
+
 /* Build metadata/layout only; no loading, hashing, signing, or file update. */
 int atfield_sgx_build_signer_layout(const uint8_t *elf, size_t elf_size,
                                     const char *config_path,
                                     atfield_sgx_signer_layout_result *out);
+int atfield_sgx_build_signer_layout_v2(
+    const uint8_t *elf, size_t elf_size, const char *config_path,
+    atfield_sgx_signer_layout_result_v2 *out, size_t out_size);
 
 #ifdef __cplusplus
 }

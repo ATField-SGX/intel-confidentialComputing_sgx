@@ -40,6 +40,8 @@
 #include "shared_object_parser.h"
 #include "atfield_sgx_signer_layout.h"
 
+#include <vector>
+
 #define MAX_BUFFER_SIZE 4096
 
 #define STRCMP strcmp
@@ -111,7 +113,9 @@ bool build_metadata_core(metadata_t *metadata, BinParser *parser,
                          SharedObjectParser *fips_parser,
                          const xml_parameter_t *parameter,
                          atfield_sgx_signer_layout_result *result,
-                         uint8_t *meta_versions);
+                         uint8_t *meta_versions,
+                         std::vector<atfield_sgx_signer_static_tcs>
+                             *typed_result);
 bool finalize_metadata_core(metadata_t *metadata, const xml_parameter_t *parameter,
                             uint8_t meta_versions);
 bool refresh_signer_layout_result(const metadata_t *metadata,
@@ -134,6 +138,8 @@ public:
     sgx_misc_select_t get_config_desired_misc_select();
     uint8_t get_meta_versions() { return m_meta_verions; }
     uint64_t get_ordinary_image_end_rva() const { return m_ordinary_image_end; }
+    const std::vector<atfield_sgx_signer_static_tcs> &
+    get_static_tcs_instances() const { return m_static_tcs_instances; }
 private:
     bool get_time(uint32_t *date);
     bool modify_metadata(const xml_parameter_t *parameter);
@@ -168,6 +174,7 @@ private:
     create_param_t m_create_param;
     elrange_config_entry_t m_elrange_config_entry;
     std::vector <layout_t> m_layouts;
+    std::vector<atfield_sgx_signer_static_tcs> m_static_tcs_instances;
     uint64_t m_rva;
     uint64_t m_ordinary_image_end;
     uint32_t m_gd_size;

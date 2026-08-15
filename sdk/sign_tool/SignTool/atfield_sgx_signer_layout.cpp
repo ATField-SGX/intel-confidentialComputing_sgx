@@ -10,6 +10,8 @@
 #include <cstddef>
 #include <cstring>
 #include <memory>
+#include <utility>
+#include <vector>
 
 static_assert(sizeof(atfield_sgx_signer_layout_record) == sizeof(layout_t),
               "layout record ABI must match SGX DIR_LAYOUT");
@@ -23,9 +25,10 @@ static_assert(offsetof(atfield_sgx_signer_layout_record, words) == offsetof(layo
 static_assert(offsetof(atfield_sgx_signer_layout_result, records) == 32, "result alignment");
 static_assert(PARAMETER_COUNT == 37, "XML parameter table changed unexpectedly");
 
-extern "C" int atfield_sgx_build_signer_layout(
+static int build_signer_layout_impl(
     const uint8_t *elf, size_t elf_size, const char *config_path,
-    atfield_sgx_signer_layout_result *out)
+    atfield_sgx_signer_layout_result *out,
+    std::vector<atfield_sgx_signer_static_tcs> *typed_result)
 {
     if (elf == NULL || elf_size == 0 || config_path == NULL || out == NULL)
         return 1;
@@ -34,7 +37,7 @@ extern "C" int atfield_sgx_build_signer_layout(
     if (!initialize_xml_parameters(parameter, PARAMETER_COUNT) ||
         !parse_metadata_file(config_path, parameter, PARAMETER_COUNT) ||
         parameter[TCSNUM].flag == 0 ||
-        parameter[TCSNUM].value != 1 ||
+        parameter[TCSNUM].value == 0 ||
         parameter[TCSPOLICY].flag == 0 ||
         parameter[TCSPOLICY].value != TCS_POLICY_BIND ||
         parameter[ENABLEAEXNOTIFY].flag == 0 ||
@@ -63,10 +66,56 @@ extern "C" int atfield_sgx_build_signer_layout(
 
     metadata_t metadata;
     std::memset(&metadata, 0, sizeof(metadata));
+    std::vector<atfield_sgx_signer_static_tcs> typed;
     uint8_t meta_versions = 0;
-    if (!build_metadata_core(&metadata, parser.get(), NULL, parameter, out, &meta_versions) ||
+    if (!build_metadata_core(&metadata, parser.get(), NULL, parameter, out,
+                             &meta_versions, &typed) ||
         !finalize_metadata_core(&metadata, parameter, meta_versions) ||
         !refresh_signer_layout_result(&metadata, out))
         return 1;
+    if (typed_result != NULL)
+        *typed_result = std::move(typed);
+    return 0;
+}
+
+extern "C" int atfield_sgx_build_signer_layout(
+    const uint8_t *elf, size_t elf_size, const char *config_path,
+    atfield_sgx_signer_layout_result *out)
+{
+    return build_signer_layout_impl(elf, elf_size, config_path, out, NULL);
+}
+
+extern "C" int atfield_sgx_build_signer_layout_v2(
+    const uint8_t *elf, size_t elf_size, const char *config_path,
+    atfield_sgx_signer_layout_result_v2 *out, size_t out_size)
+{
+    if (out == NULL || out_size < sizeof(*out) ||
+        out->abi_version != ATFIELD_SGX_SIGNER_LAYOUT_ABI_V2 ||
+        out->struct_size != sizeof(*out) ||
+        (out->static_tcs_capacity != 0 && out->static_tcs == NULL))
+        return 1;
+    const uint32_t static_tcs_capacity = out->static_tcs_capacity;
+    atfield_sgx_signer_static_tcs *static_tcs = out->static_tcs;
+
+    atfield_sgx_signer_layout_result raw{};
+    std::vector<atfield_sgx_signer_static_tcs> typed;
+    if (build_signer_layout_impl(elf, elf_size, config_path, &raw, &typed) !=
+            0 ||
+        out->abi_version != ATFIELD_SGX_SIGNER_LAYOUT_ABI_V2 ||
+        out->struct_size != sizeof(*out) ||
+        out->static_tcs_capacity != static_tcs_capacity ||
+        out->static_tcs != static_tcs ||
+        typed.size() > static_tcs_capacity)
+        return 1;
+
+    out->metadata_version = raw.metadata_version;
+    out->enclave_size = raw.enclave_size;
+    out->ordinary_image_end_rva = raw.ordinary_image_end_rva;
+    out->layout_count = raw.layout_count;
+    std::memcpy(out->records, raw.records, sizeof(out->records));
+    if (!typed.empty())
+        std::memcpy(out->static_tcs, typed.data(),
+                    typed.size() * sizeof(out->static_tcs[0]));
+    out->static_tcs_count = static_cast<uint32_t>(typed.size());
     return 0;
 }
