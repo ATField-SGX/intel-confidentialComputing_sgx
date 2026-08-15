@@ -15,6 +15,7 @@ from __future__ import print_function
 
 import re
 import gdb
+import gdb.printing
 import struct
 
 def get_inferior():
