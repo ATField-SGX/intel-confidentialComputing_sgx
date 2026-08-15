@@ -60,9 +60,9 @@ def GetLoadSymbolCommand(EnclaveFile, Base):
                 # The readelf will put a space after the open bracket for single
                 # digit section numbers.  This causes the line.split to create
                 # an extra element in the array for these lines.
-                if(re.match('\[\s*[0-9]+\]',list[0])):
+                if(re.match(r'\[\s*[0-9]+\]',list[0])):
                     SegOffset = 0;
-                if(re.match('\s*[0-9]+\]',list[1])):
+                if(re.match(r'\s*[0-9]+\]',list[1])):
                     SegOffset = 1;
 
                 if(SegOffset != -1):
@@ -117,9 +117,9 @@ def GetUnloadSymbolCommand(EnclaveFile, Base):
                 # The readelf will put a space after the open bracket for single
                 # digit section numbers.  This causes the line.split to create
                 # an extra element in the array for these lines.
-                if(re.match('\[\s*[0-9]+\]',list[0])):
+                if(re.match(r'\[\s*[0-9]+\]',list[0])):
                     SegOffset = 0;
-                if(re.match('\s*[0-9]+\]',list[1])):
+                if(re.match(r'\s*[0-9]+\]',list[1])):
                     SegOffset = 1;
 
                 if(SegOffset != -1):
