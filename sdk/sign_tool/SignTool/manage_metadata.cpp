@@ -1496,6 +1496,12 @@ bool CMetadata::update_layout_entries()
     };
     auto find_td = [&](size_t tcs_index, layout_entry_t &td) -> bool {
         uint64_t rva = m_layouts[tcs_index].entry.rva;
+        const uint64_t tcs_bytes =
+            static_cast<uint64_t>(m_layouts[tcs_index].entry.page_count) <<
+            SE_PAGE_SHIFT;
+        if (rva > std::numeric_limits<uint64_t>::max() - tcs_bytes)
+            return false;
+        rva += tcs_bytes;
         for (size_t index = tcs_index + 1; index < m_layouts.size(); ++index) {
             const uint16_t id = m_layouts[index].entry.id;
             if (id == LAYOUT_ID_TD) {
