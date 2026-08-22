@@ -22,7 +22,7 @@ static_assert(offsetof(atfield_sgx_signer_layout_record, second) == offsetof(lay
 static_assert(offsetof(atfield_sgx_signer_layout_record, u32) == offsetof(layout_entry_t, page_count), "u32 offset");
 static_assert(offsetof(atfield_sgx_signer_layout_record, u64) == offsetof(layout_entry_t, rva), "u64 offset");
 static_assert(offsetof(atfield_sgx_signer_layout_record, words) == offsetof(layout_entry_t, content_size), "words offset");
-static_assert(offsetof(atfield_sgx_signer_layout_result_v3, records) == 32, "result alignment");
+static_assert(offsetof(atfield_sgx_signer_layout_result_v3, records) == 40, "result alignment");
 static_assert(PARAMETER_COUNT == 37, "XML parameter table changed unexpectedly");
 
 static int build_signer_layout_impl(
