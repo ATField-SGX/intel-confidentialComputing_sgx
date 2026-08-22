@@ -112,14 +112,14 @@ size_t get_xml_parameter_count();
 bool build_metadata_core(metadata_t *metadata, BinParser *parser,
                          SharedObjectParser *fips_parser,
                          const xml_parameter_t *parameter,
-                         atfield_sgx_signer_layout_result *result,
+                         atfield_sgx_signer_layout_result_v3 *result,
                          uint8_t *meta_versions,
                          std::vector<atfield_sgx_signer_static_tcs>
                              *typed_result);
 bool finalize_metadata_core(metadata_t *metadata, const xml_parameter_t *parameter,
                             uint8_t meta_versions);
 bool refresh_signer_layout_result(const metadata_t *metadata,
-                                  atfield_sgx_signer_layout_result *result);
+                                  atfield_sgx_signer_layout_result_v3 *result);
 bool update_metadata(const char *path, const metadata_t *metadata, uint64_t meta_offset);
 bool print_metadata(const char *path, const metadata_t *metadata);
 

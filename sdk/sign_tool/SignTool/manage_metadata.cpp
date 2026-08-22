@@ -656,7 +656,7 @@ end:
 
 
 bool refresh_signer_layout_result(const metadata_t *metadata,
-                                  atfield_sgx_signer_layout_result *result)
+                                  atfield_sgx_signer_layout_result_v3 *result)
 {
     if (metadata == NULL || result == NULL)
         return false;
@@ -679,7 +679,7 @@ bool refresh_signer_layout_result(const metadata_t *metadata,
 bool build_metadata_core(metadata_t *metadata, BinParser *parser,
                          SharedObjectParser *fips_parser,
                          const xml_parameter_t *parameter,
-                         atfield_sgx_signer_layout_result *result,
+                         atfield_sgx_signer_layout_result_v3 *result,
                          uint8_t *meta_versions,
                          std::vector<atfield_sgx_signer_static_tcs>
                              *typed_result)
@@ -695,7 +695,17 @@ bool build_metadata_core(metadata_t *metadata, BinParser *parser,
     if (result == NULL)
         return true;
 
+    const uint32_t abi_version = result->abi_version;
+    const uint32_t struct_size = result->struct_size;
+    const uint32_t static_tcs_capacity = result->static_tcs_capacity;
+    const uint32_t static_tcs_count = result->static_tcs_count;
+    atfield_sgx_signer_static_tcs *static_tcs = result->static_tcs;
     memset(result, 0, sizeof(*result));
+    result->abi_version = abi_version;
+    result->struct_size = struct_size;
+    result->static_tcs_capacity = static_tcs_capacity;
+    result->static_tcs_count = static_tcs_count;
+    result->static_tcs = static_tcs;
     result->ordinary_image_end_rva = meta.get_ordinary_image_end_rva();
     if (!refresh_signer_layout_result(metadata, result))
         return false;
@@ -1417,9 +1427,14 @@ bool CMetadata::update_layout_entries()
     m_static_tcs_instances.clear();
     auto append_static_tcs = [&](const layout_entry_t &tcs,
                                  const layout_entry_t &stack,
+                                 const layout_entry_t &td,
                                  uint64_t rva_delta) -> bool {
         if (m_static_tcs_instances.size() >=
             ATFIELD_SGX_SIGNER_LAYOUT_MAX_RECORDS)
+            return false;
+        if (tcs.rva > std::numeric_limits<uint64_t>::max() - rva_delta ||
+            stack.rva > std::numeric_limits<uint64_t>::max() - rva_delta ||
+            td.rva > std::numeric_limits<uint64_t>::max() - rva_delta)
             return false;
         const uint64_t tcs_rva = tcs.rva + rva_delta;
         const uint64_t stack_bottom = stack.rva + rva_delta;
@@ -1431,9 +1446,39 @@ bool CMetadata::update_layout_entries()
             stack_bottom > std::numeric_limits<uint64_t>::max() - stack_bytes)
             return false;
         const uint64_t stack_top = stack_bottom + stack_bytes;
+        const uint64_t td_bottom = td.rva + rva_delta;
+        const uint64_t td_bytes =
+            static_cast<uint64_t>(td.page_count) * SE_PAGE_SIZE;
+        if (td_bottom < td.rva || td.page_count == 0 ||
+            td_bytes / SE_PAGE_SIZE != td.page_count ||
+            td_bottom > std::numeric_limits<uint64_t>::max() - td_bytes)
+            return false;
+        const uint64_t td_top = td_bottom + td_bytes;
+        const uint64_t elrange_offset =
+            m_elrange_config_entry.elrange_size == 0
+                ? 0
+                : m_elrange_config_entry.enclave_image_address -
+                      m_elrange_config_entry.elrange_start_address;
+        const uint64_t td_last_page =
+            static_cast<uint64_t>(td.page_count - 1) * SE_PAGE_SIZE;
+        if (td_bottom > std::numeric_limits<uint64_t>::max() - td_last_page)
+            return false;
+        const uint64_t td_page_rva = td_bottom + td_last_page;
+        if (td_page_rva < tcs_rva)
+            return false;
+        const uint64_t td_page_offset = td_page_rva - tcs_rva;
+        if (td_page_offset >
+            std::numeric_limits<uint64_t>::max() - elrange_offset)
+            return false;
+        const uint64_t tcs_fs_base = td_page_offset + elrange_offset;
+        if (tcs_rva > std::numeric_limits<uint64_t>::max() - tcs_fs_base ||
+            tcs_rva + tcs_fs_base < elrange_offset)
+            return false;
+        const uint64_t fs_base_rva = tcs_rva + tcs_fs_base - elrange_offset;
         m_static_tcs_instances.push_back(
             {static_cast<uint64_t>(m_static_tcs_instances.size()) + 1,
-             tcs_rva, stack_bottom, stack.page_count, stack_top});
+             tcs_rva, stack_bottom, stack.page_count, stack_top, td_bottom,
+             td.page_count, td_top, fs_base_rva, fs_base_rva});
         return true;
     };
     auto find_stack = [&](size_t begin, size_t tcs_index,
@@ -1449,6 +1494,26 @@ bool CMetadata::update_layout_entries()
         }
         return false;
     };
+    auto find_td = [&](size_t tcs_index, layout_entry_t &td) -> bool {
+        uint64_t rva = m_layouts[tcs_index].entry.rva;
+        for (size_t index = tcs_index + 1; index < m_layouts.size(); ++index) {
+            const uint16_t id = m_layouts[index].entry.id;
+            if (id == LAYOUT_ID_TD) {
+                td = m_layouts[index].entry;
+                td.rva = rva;
+                return true;
+            }
+            if (id == LAYOUT_ID_TCS || IS_GROUP_ID(id))
+                break;
+            const uint64_t bytes =
+                static_cast<uint64_t>(m_layouts[index].entry.page_count) <<
+                SE_PAGE_SHIFT;
+            if (rva > std::numeric_limits<uint64_t>::max() - bytes)
+                return false;
+            rva += bytes;
+        }
+        return false;
+    };
 
     for(uint32_t i = 0; i < m_layouts.size(); i++)
     {
@@ -1458,8 +1523,9 @@ bool CMetadata::update_layout_entries()
             m_rva += (((uint64_t)m_layouts[i].entry.page_count) << SE_PAGE_SHIFT);
             if (m_layouts[i].entry.id == LAYOUT_ID_TCS) {
                 layout_entry_t stack{};
-                if (!find_stack(0, i, stack) ||
-                    !append_static_tcs(m_layouts[i].entry, stack, 0))
+                layout_entry_t td{};
+                if (!find_stack(0, i, stack) || !find_td(i, td) ||
+                    !append_static_tcs(m_layouts[i].entry, stack, td, 0))
                     return false;
             }
 
@@ -1486,8 +1552,11 @@ bool CMetadata::update_layout_entries()
                  if (m_layouts[member].entry.id != LAYOUT_ID_TCS)
                    continue;
                  layout_entry_t stack{};
+                layout_entry_t td{};
                  if (!find_stack(begin, member, stack) ||
-                     !append_static_tcs(m_layouts[member].entry, stack, delta))
+                    !find_td(member, td) ||
+                    !append_static_tcs(m_layouts[member].entry, stack, td,
+                                       delta))
                    return false;
                }
              }
