@@ -56,6 +56,7 @@
 #include "sgx_mm_rt_abstraction.h"
 #include "sgx_trts_aex.h"
 #include "ctd.h"
+#include "elf_util.h"
 
 #include "se_memcpy.h"
 typedef struct _handler_node_t
@@ -217,6 +218,375 @@ static inline uint64_t cselect64(uint64_t pred, const uint64_t expected, uint64_
     return new_val;
 }
 
+static uintptr_t c3_cache_lookup(uint64_t address)
+{
+    const uintptr_t page = address & ~static_cast<uintptr_t>(0xFFF);
+    uintptr_t c3_byte_address =
+        page + *(aex_notify_c3_cache + ((page >> 12) & 0x07FF));
+    if (*(uint8_t *)c3_byte_address != 0xc3)
+    {
+        uint8_t *i = (uint8_t *)page;
+        uint8_t *e = i + 4096;
+        for (; i != e && *i != 0xc3; ++i) {}
+        if (i == e)
+        {
+            c3_byte_address = (uintptr_t)&__ct_mitigation_ret;
+        }
+        else
+        {
+            c3_byte_address = (uintptr_t)i;
+            *(aex_notify_c3_cache + ((page >> 12) & 0x07FF)) =
+                (uint16_t)(c3_byte_address & 0xFFF);
+        }
+    }
+    return c3_byte_address;
+}
+
+#define TLBLUR_PAM_SIZE_BYTES       0x1000000ULL
+#define TLBLUR_PAM_ENTRY_COUNT      (TLBLUR_PAM_SIZE_BYTES / sizeof(uint64_t))
+#define TLBLUR_PAM_PAGE_COUNT       (TLBLUR_PAM_SIZE_BYTES / 0x1000ULL)
+#define TLBLUR_MAX_PWS_SIZE         4096ULL
+#define TLBLUR_MANDATORY_PWS_SIZE   (TLBLUR_PAM_PAGE_COUNT + 2)
+#define TLBLUR_PWS_CAPACITY         (TLBLUR_MAX_PWS_SIZE + TLBLUR_MANDATORY_PWS_SIZE)
+
+extern "C" uint64_t __tlblur_pam[] __attribute__((weak));
+extern "C" uint64_t __tlblur_counter __attribute__((weak));
+extern "C" void tlblur_pam_update(void) __attribute__((weak));
+
+extern "C" {
+bool g_tlblur_enabled = false;
+uint64_t g_tlblur_pws_size = 0;
+uint64_t g_tlblur_pws_r_size = 0;
+uint64_t g_tlblur_pws_x_size = 0;
+uint64_t g_tlblur_pws_w_size = 0;
+uint64_t g_tlblur_prefetch_r[TLBLUR_PWS_CAPACITY] = {0};
+uint64_t g_tlblur_prefetch_w[TLBLUR_PWS_CAPACITY] = {0};
+uint64_t g_tlblur_prefetch_x[TLBLUR_PWS_CAPACITY] = {0};
+}
+static uint64_t g_tlblur_prefetch_buffer[TLBLUR_PWS_CAPACITY] = {0};
+/* __tlblur_pam_size is bytes in runtime; this length is PAM uint64_t entries. */
+static uint64_t g_tlblur_pam_size = TLBLUR_PAM_ENTRY_COUNT;
+static uint64_t g_tlblur_prefetch_count = 0;
+
+static inline uint64_t tlblur_nonzero(uint64_t value)
+{
+    return (value | (0 - value)) >> 63;
+}
+
+static inline uint64_t tlblur_less(uint64_t lhs, uint64_t rhs)
+{
+    return lhs < rhs;
+}
+
+static bool tlblur_runtime_available(void)
+{
+    /* TLBLUR_PAM_SIZE_BYTES must agree with __tlblur_pam_size in the TLBlur
+     * runtime (runtime/tlblur.S), which sizes the PAM and masks the index.
+     * That is an assembly absolute symbol, so its value cannot be read from
+     * C: taking its address under PIE yields __ImageBase + 0x1000000. The
+     * agreement is therefore a build-time convention, not a runtime check. */
+    return reinterpret_cast<uintptr_t>(__tlblur_pam) != 0 &&
+           reinterpret_cast<uintptr_t>(&__tlblur_counter) != 0 &&
+           reinterpret_cast<uintptr_t>(tlblur_pam_update) != 0;
+}
+
+/*
+ * Page permissions come from the enclave image's own program headers, not from
+ * linker-script boundary symbols: symbols such as _srx/_ero are neither page
+ * aligned nor guaranteed to cover every allocated section, so a page-base
+ * address derived from a PAM index can fall outside them and be misclassified.
+ * The loader derives EPCM permissions from the same headers
+ * (elf_parser.c:init_segment_emas), so the headers are authoritative.
+ */
+#define TLBLUR_MAX_SEGMENTS 16
+
+struct tlblur_range
+{
+    uintptr_t start;
+    uintptr_t end;
+};
+
+static tlblur_range g_tlblur_load[TLBLUR_MAX_SEGMENTS];
+static uint32_t g_tlblur_load_flags[TLBLUR_MAX_SEGMENTS];
+static size_t g_tlblur_load_count = 0;
+static tlblur_range g_tlblur_relro[TLBLUR_MAX_SEGMENTS];
+static size_t g_tlblur_relro_count = 0;
+
+/* Page rounding identical to elf_parser.c change_protection/init_segment_emas. */
+static void tlblur_segment_pages(uintptr_t base, const ElfW(Phdr) *phdr,
+                                 tlblur_range *out)
+{
+    out->start = base + (phdr->p_vaddr & ~static_cast<uintptr_t>(SE_PAGE_SIZE - 1));
+    out->end = base + ((phdr->p_vaddr + phdr->p_memsz + SE_PAGE_SIZE - 1) &
+                       ~static_cast<uintptr_t>(SE_PAGE_SIZE - 1));
+}
+
+static bool tlblur_load_segments(void)
+{
+    const uintptr_t base = reinterpret_cast<uintptr_t>(get_enclave_base());
+    const ElfW(Ehdr) *ehdr = reinterpret_cast<const ElfW(Ehdr) *>(base);
+    const ElfW(Phdr) *phdr = reinterpret_cast<const ElfW(Phdr) *>(
+        base + static_cast<uintptr_t>(ehdr->e_phoff));
+
+    g_tlblur_load_count = 0;
+    g_tlblur_relro_count = 0;
+
+    for (ElfW(Half) i = 0; i < ehdr->e_phnum; ++i, ++phdr)
+    {
+        if (phdr->p_type == PT_LOAD)
+        {
+            if (g_tlblur_load_count >= TLBLUR_MAX_SEGMENTS)
+                return false;
+            tlblur_segment_pages(base, phdr,
+                                 &g_tlblur_load[g_tlblur_load_count]);
+            g_tlblur_load_flags[g_tlblur_load_count] = phdr->p_flags;
+            ++g_tlblur_load_count;
+        }
+        else if (phdr->p_type == PT_GNU_RELRO)
+        {
+            if (g_tlblur_relro_count >= TLBLUR_MAX_SEGMENTS)
+                return false;
+            tlblur_segment_pages(base, phdr,
+                                 &g_tlblur_relro[g_tlblur_relro_count]);
+            ++g_tlblur_relro_count;
+        }
+    }
+
+    return g_tlblur_load_count != 0;
+}
+
+static bool tlblur_in_range(const tlblur_range *range, uintptr_t address)
+{
+    return address >= range->start && address < range->end;
+}
+
+/*
+ * Effective page permissions.  Addresses outside every PT_LOAD (heap, stack,
+ * TCS, reserved layout entries) are read-write.  PT_GNU_RELRO pages lose PF_W
+ * because change_protection() strips it after relocation, so writing them
+ * would fault exactly like writing an RX page.
+ */
+static uint32_t tlblur_page_flags(uintptr_t address)
+{
+    uint32_t flags = PF_R | PF_W;
+
+    for (size_t i = 0; i < g_tlblur_load_count; ++i)
+    {
+        if (tlblur_in_range(&g_tlblur_load[i], address))
+        {
+            flags = g_tlblur_load_flags[i];
+            break;
+        }
+    }
+
+    for (size_t i = 0; i < g_tlblur_relro_count; ++i)
+    {
+        if (tlblur_in_range(&g_tlblur_relro[i], address))
+        {
+            flags &= ~static_cast<uint32_t>(PF_W);
+            break;
+        }
+    }
+
+    return flags;
+}
+
+static bool tlblur_is_exec(uintptr_t address)
+{
+    return (tlblur_page_flags(address) & PF_X) != 0;
+}
+
+static bool tlblur_is_writable(uintptr_t address)
+{
+    return (tlblur_page_flags(address) & PF_W) != 0;
+}
+
+static bool tlblur_append(uint64_t *array, uint64_t *size, uint64_t value)
+{
+    if (*size >= TLBLUR_PWS_CAPACITY)
+        return false;
+    array[*size] = value;
+    ++*size;
+    return true;
+}
+
+static void tlblur_select_max_lt(uint64_t input[], size_t input_len,
+                                  uint64_t limit, uint64_t *max,
+                                  uint64_t *max_idx)
+{
+    *max = 0;
+    *max_idx = 0;
+    for (size_t i = 0; i < input_len; ++i)
+    {
+        const uint64_t current = input[i];
+        const uint64_t current_lt_limit = current < limit;
+        const uint64_t current_ge_max = current >= *max;
+        const uint64_t replace = tlblur_nonzero(current) &
+                                 current_lt_limit & current_ge_max;
+        *max = cselect64(replace, 1, current, *max);
+        *max_idx = cselect64(replace, 1, i, *max_idx);
+    }
+}
+
+/*
+ * Select the top-N PAM counters.  PAM values determine recency here, while
+ * cselect64 keeps the scan schedule independent of their contents.
+ */
+static void tlblur_select_pws(uint64_t pam[], size_t pam_len, uint64_t pws[],
+                              size_t pws_len)
+{
+    uint64_t limit = static_cast<uint64_t>(-1);
+    for (size_t j = 0; j < pws_len; ++j)
+    {
+        uint64_t max = 0;
+        uint64_t max_idx = 0;
+        tlblur_select_max_lt(pam, pam_len, limit, &max, &max_idx);
+        pws[j] = max_idx;
+        limit = max;
+    }
+}
+
+/*
+ * Sort page indices in ascending order with a fixed compare/exchange schedule
+ * after the recency selection, so the final access order does not expose PAM
+ * freshness.
+ */
+static void tlblur_sort(uint64_t input[], uint64_t output[], size_t input_len,
+                        size_t output_len)
+{
+    if (input_len == 0 || output_len == 0)
+        return;
+
+    for (size_t i = 0; i < output_len; ++i)
+        output[i] = input[i];
+
+    for (size_t i = 0; i < output_len; ++i)
+    {
+        for (size_t j = i + 1; j < output_len; ++j)
+        {
+            const uint64_t left = output[i];
+            const uint64_t right = output[j];
+            const uint64_t swap = tlblur_less(right, left);
+            // cselect64(pred, 1, a, b) yields `a` when pred == 1.
+            output[i] = cselect64(swap, 1, right, left);
+            output[j] = cselect64(swap, 1, left, right);
+        }
+    }
+}
+
+static bool tlblur_prepare_prefetch(uintptr_t stack_page, uintptr_t c3_byte_address)
+{
+    const uintptr_t enclave_base = reinterpret_cast<uintptr_t>(get_enclave_base());
+    const size_t candidate_count = static_cast<size_t>(g_tlblur_pws_size);
+    const size_t fixed_count = static_cast<size_t>(g_tlblur_prefetch_count);
+    size_t r_size = 0;
+    size_t w_size = 0;
+    size_t x_size = 0;
+
+    for (size_t i = 0; i < fixed_count; ++i)
+    {
+        g_tlblur_prefetch_r[i] = c3_byte_address;
+        g_tlblur_prefetch_w[i] = stack_page;
+        g_tlblur_prefetch_x[i] = c3_byte_address;
+    }
+
+    tlblur_select_pws(__tlblur_pam, static_cast<size_t>(g_tlblur_pam_size),
+                      g_tlblur_prefetch_buffer, candidate_count);
+    tlblur_sort(g_tlblur_prefetch_buffer, g_tlblur_prefetch_buffer,
+                candidate_count, candidate_count);
+
+    for (size_t i = 0; i < candidate_count; ++i)
+    {
+        const uint64_t selected = g_tlblur_prefetch_buffer[i];
+        const uintptr_t address = selected == 0 ?
+            c3_byte_address : enclave_base + (selected << 12);
+
+        if (!tlblur_append(g_tlblur_prefetch_r, &r_size, address))
+            return false;
+
+        if (tlblur_is_exec(address))
+        {
+            if (!tlblur_append(g_tlblur_prefetch_x, &x_size,
+                               c3_cache_lookup(address)))
+                return false;
+        }
+        else if (tlblur_is_writable(address) &&
+                 !tlblur_append(g_tlblur_prefetch_w, &w_size, address))
+        {
+            return false;
+        }
+    }
+
+    for (size_t offset = 0; offset < g_tlblur_pam_size * sizeof(uint64_t);
+         offset += 0x1000)
+    {
+        const uintptr_t address = reinterpret_cast<uintptr_t>(__tlblur_pam) + offset;
+        if (!tlblur_append(g_tlblur_prefetch_r, &r_size, address) ||
+            !tlblur_append(g_tlblur_prefetch_w, &w_size, address))
+            return false;
+    }
+
+    const uintptr_t counter_address = reinterpret_cast<uintptr_t>(&__tlblur_counter);
+    if (!tlblur_append(g_tlblur_prefetch_r, &r_size, counter_address) ||
+        !tlblur_append(g_tlblur_prefetch_w, &w_size, counter_address))
+        return false;
+
+    const uintptr_t update_address = c3_cache_lookup(
+        reinterpret_cast<uintptr_t>(tlblur_pam_update));
+    if (!tlblur_append(g_tlblur_prefetch_r, &r_size, update_address) ||
+        !tlblur_append(g_tlblur_prefetch_x, &x_size, update_address))
+        return false;
+
+    if (r_size > fixed_count || w_size > fixed_count || x_size > fixed_count)
+        return false;
+
+    g_tlblur_pws_r_size = fixed_count;
+    g_tlblur_pws_w_size = fixed_count;
+    g_tlblur_pws_x_size = fixed_count;
+    return true;
+}
+
+extern "C" sgx_status_t tlblur_enable(uint64_t vtlb_size)
+{
+    if (vtlb_size > TLBLUR_MAX_PWS_SIZE || !tlblur_runtime_available())
+        return SGX_ERROR_UNEXPECTED;
+
+    /* Cache the image segment permissions once; the AEX path must not walk
+     * the program headers or take any lock. */
+    if (!tlblur_load_segments())
+        return SGX_ERROR_UNEXPECTED;
+
+    const uint64_t enclave_pages = get_enclave_size() >> 12;
+    g_tlblur_pam_size = enclave_pages < TLBLUR_PAM_ENTRY_COUNT ?
+        enclave_pages : TLBLUR_PAM_ENTRY_COUNT;
+    g_tlblur_pws_size = vtlb_size;
+    if (g_tlblur_pws_size > g_tlblur_pam_size)
+        g_tlblur_pws_size = g_tlblur_pam_size;
+    const uint64_t pam_page_count =
+        (g_tlblur_pam_size * sizeof(uint64_t) + 0xFFF) >> 12;
+    if (pam_page_count + 2 > TLBLUR_PWS_CAPACITY ||
+        g_tlblur_pws_size > TLBLUR_PWS_CAPACITY - pam_page_count - 2)
+        return SGX_ERROR_INVALID_PARAMETER;
+
+    g_tlblur_prefetch_count = g_tlblur_pws_size + pam_page_count + 2;
+    g_tlblur_pws_r_size = 0;
+    g_tlblur_pws_w_size = 0;
+    g_tlblur_pws_x_size = 0;
+    g_tlblur_enabled = true;
+    return SGX_SUCCESS;
+}
+
+extern "C" sgx_status_t tlblur_disable(void)
+{
+    g_tlblur_enabled = false;
+    g_tlblur_pws_size = 0;
+    g_tlblur_prefetch_count = 0;
+    g_tlblur_pws_r_size = 0;
+    g_tlblur_pws_w_size = 0;
+    g_tlblur_pws_x_size = 0;
+    return SGX_SUCCESS;
+}
+
 // apply the constant time mitigation handler
 static void apply_constant_time_sgxstep_mitigation_and_continue_execution(sgx_exception_info_t *info)
 {
@@ -257,18 +627,7 @@ static void apply_constant_time_sgxstep_mitigation_and_continue_execution(sgx_ex
 
     // Look up the code page in the c3 cache
     code_tickle_page = saved_rip & ~0xFFF;
-    c3_byte_address = code_tickle_page + *(aex_notify_c3_cache + ((code_tickle_page >> 12) & 0x07FF));
-    if (*(uint8_t *)c3_byte_address != 0xc3) {
-        uint8_t *i = (uint8_t *)code_tickle_page, *e = i + 4096;
-        for (; i != e && *i != 0xc3; ++i) {}
-        if (i == e) { // code_tickle_page does not contain a c3 byte
-            c3_byte_address = (uintptr_t)&__ct_mitigation_ret;
-        } else {
-            c3_byte_address = (uintptr_t)i;
-            *(aex_notify_c3_cache + ((code_tickle_page >> 12) & 0x07FF)) =
-                (uint16_t)(c3_byte_address & 0xFFF);
-        }
-    }
+    c3_byte_address = c3_cache_lookup(code_tickle_page);
 
     // NOTE: in case the previous interrupt was in the atomic mitigation
     // stub, first restore clobbered application registers in the info
@@ -310,6 +669,20 @@ static void apply_constant_time_sgxstep_mitigation_and_continue_execution(sgx_ex
     code_tickle_page |= (thread_data->aex_notify_entropy_cache & 1) << 4;
     thread_data->aex_notify_entropy_cache >>= 1;
 
+    if (g_tlblur_enabled &&
+        !tlblur_prepare_prefetch(stack_tickle_pages & ~static_cast<uintptr_t>(1),
+                                 c3_byte_address))
+    {
+        // Every append is checked; disable the optional prefetcher rather than
+        // entering the mitigation with a partially populated working set.
+        g_tlblur_enabled = false;
+        g_tlblur_pws_size = 0;
+        g_tlblur_prefetch_count = 0;
+        g_tlblur_pws_r_size = 0;
+        g_tlblur_pws_w_size = 0;
+        g_tlblur_pws_x_size = 0;
+    }
+
     // There are three additional "implicit" parameters to this function:
     // 1. The low-order bit of `stack_tickle_pages` is 1 if a second stack
     //    page should be tickled (specifically, the stack page immediately
@@ -324,6 +697,21 @@ static void apply_constant_time_sgxstep_mitigation_and_continue_execution(sgx_ex
                     stack_tickle_pages, code_tickle_page,
                     data_tickle_address, c3_byte_address);
 }
+#else
+
+// Simulation mode has no AEX-Notify mitigation to hook, so TLBlur is a no-op.
+// The symbols must still exist so SIM enclaves link against the same API.
+sgx_status_t tlblur_enable(uint64_t vtlb_size)
+{
+    (void)vtlb_size;
+    return SGX_SUCCESS;
+}
+
+sgx_status_t tlblur_disable(void)
+{
+    return SGX_SUCCESS;
+}
+
 #endif
 
 //      the 2nd phrase exception handing, which traverse registered exception handlers.
