@@ -56,6 +56,22 @@ sgx_status_t sgx_create_encrypted_enclave()
     return SGX_ERROR_UNEXPECTED;
 }
 
+void *sgx_get_aep(void)
+{
+    printf("Please use the correct uRTS library from PSW package.\n");
+    return NULL;
+}
+
+void sgx_set_aep(void *aep)
+{
+    printf("Please use the correct uRTS library from PSW package.\n");
+}
+
+void *sgx_get_tcs(void)
+{
+    printf("Please use the correct uRTS library from PSW package.\n");
+    return NULL;
+}
 
 void sgx_debug_load_state_add_element(){};
 void sgx_debug_unload_state_remove_element(){};
